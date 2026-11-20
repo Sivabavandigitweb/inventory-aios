@@ -76,3 +76,6 @@ No role receives an automatic exception or bypass. Final clearance must re-check
 Idempotency protects authorized commands; it does not grant authorization. The original request’s principal, object scope, role checks, and validation are applied before a stored result is replayed. A different principal cannot use another principal’s key to retrieve or mutate a result. Stored responses must be filtered to the requesting principal and must not expose secrets.
 
 The important command families requiring idempotency coverage are receiving, allocation, return, approval, disposal, and employee exit. These controls are proposed technical behavior and do not settle which roles may approve or clear an exit.
+## Authentication foundation status (technical proposal)
+
+The backend now has a provider-neutral credential-verifier interface, an active-user check, and request-time filtering of currently valid `user_roles`. The default verifier is unconfigured and the default role-permission policy grants no permissions; protected employee endpoints therefore remain closed. No role assignments or grants have been approved or seeded. See [authentication design](authentication.md) for the recommended OIDC/session design, proposed schema additions, and decisions requiring approval.

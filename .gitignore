@@ -4,6 +4,9 @@
 !.env.example
 *.env.local
 
+# Local PostgreSQL backups
+/backups/
+
 # Node.js / React / Vite
 node_modules/
 dist/

@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 import time
 from uuid import uuid4
 
@@ -88,7 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "VALIDATION_ERROR",
                 "Request validation failed.",
                 request.state.request_id,
-                details=exc.errors(),
+                details=[{"location": list(error.get("loc", ())), "type": error.get("type", "validation_error"), "message": error.get("msg", "Invalid value.")} for error in exc.errors()],
             ),
         )
 

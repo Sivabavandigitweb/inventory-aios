@@ -194,3 +194,6 @@ Status values remain application-level proposals and are not constrained by this
 - User: proposed `active`, `inactive`, and `suspended`; authentication and role-revocation behavior remains subject to the approved identity policy.
 
 The database deliberately does not enforce these values or transitions yet. Management must confirm the final vocabulary, transition authority, reactivation rules, and treatment of imported or legacy records before status constraints are added.
+## Authentication schema gap (proposed; not migrated)
+
+The current core schema does not store passwords, external identity subjects, login sessions, or revoked-session state. The recommended approach is company-managed OIDC without application-managed passwords, plus stable external identity mapping and hashed opaque session tokens if immediate application logout/revocation is required. Proposed additions are `user_identities` (unique issuer/subject mapped to `users.id`) and `auth_sessions` (user, token hash, timestamps, expiry, revocation, minimal client metadata). These proposals require identity/security approval and an Alembic review before implementation. No schema change has been made. Existing `user_roles.valid_from`/`valid_to` records support assignment validity only; they are not authentication sessions.
