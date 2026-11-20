@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inventory-aios-backend"
+version = "0.1.0"
+description = "FastAPI foundation for Inventory AIOS"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.14,<2.0",
+  "fastapi>=0.115,<1.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "SQLAlchemy>=2.0,<3.0",
+  "pydantic-settings>=2.6,<3.0",
+  "uvicorn[standard]>=0.30,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27,<1.0",
+  "pytest>=8.0,<10.0",
+  "ruff>=0.8,<1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

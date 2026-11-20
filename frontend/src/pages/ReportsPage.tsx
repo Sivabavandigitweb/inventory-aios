@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function ReportsPage() { return <PlaceholderPage title="Reports" description="Prepare searchable, permission-aware inventory and audit reports." nextStep="Report definitions and export contracts" /> }

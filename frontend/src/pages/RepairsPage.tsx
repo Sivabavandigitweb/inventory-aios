@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function RepairsPage() { return <PlaceholderPage title="Repairs" description="Follow damaged assets through reporting, service, and repair completion." nextStep="Repair cases and asset status transitions" /> }

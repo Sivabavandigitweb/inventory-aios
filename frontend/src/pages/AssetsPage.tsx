@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function AssetsPage() { return <PlaceholderPage title="Assets" description="Register, search, and monitor every company-owned asset." nextStep="Asset registry and receiving workflows" /> }

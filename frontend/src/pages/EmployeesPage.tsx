@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function EmployeesPage() { return <PlaceholderPage title="Employees" description="Keep employee profiles and organizational history connected to assigned assets." nextStep="Employee onboarding and organizational history" /> }

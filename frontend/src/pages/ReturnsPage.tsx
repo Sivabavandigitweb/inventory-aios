@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function ReturnsPage() { return <PlaceholderPage title="Returns" description="Capture asset returns, verification, condition, and employee exit clearance." nextStep="Return verification and exit workflow" /> }

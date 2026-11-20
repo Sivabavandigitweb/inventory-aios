@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function AllocationsPage() { return <PlaceholderPage title="Allocations" description="Track which assets are assigned, to whom, and under what condition." nextStep="Allocation lifecycle and authorization" /> }

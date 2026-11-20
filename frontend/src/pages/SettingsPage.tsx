@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function SettingsPage() { return <PlaceholderPage title="Settings" description="Manage reference data, workspace preferences, and future access controls." nextStep="Approved configuration and role policies" /> }

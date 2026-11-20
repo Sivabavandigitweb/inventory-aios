@@ -1,0 +1,2 @@
+import { PlaceholderPage } from '../components/PlaceholderPage'
+export function ApprovalsPage() { return <PlaceholderPage title="Approvals" description="Review approval requests for asset registration, allocation, returns, and disposal." nextStep="Role-based approval queues" /> }
