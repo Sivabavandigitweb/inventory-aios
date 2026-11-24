@@ -1,16 +1,22 @@
-﻿from fastapi import Depends
+from collections.abc import Callable
+from typing import Annotated
+
+from fastapi import Depends
 
 from app.core.authentication import Principal, authenticated_principal
 from app.core.errors import AppError
 
 
-def require_employee_reader(principal: Principal = Depends(authenticated_principal)) -> Principal:
-    if "employees:read:all" not in principal.permissions:
-        raise AppError("FORBIDDEN", "Employee directory access is not permitted.", 403)
-    return principal
+def require_permission(permission: str) -> Callable[..., Principal]:
+    """Build a reusable fail-closed permission dependency."""
+
+    def dependency(principal: Annotated[Principal, Depends(authenticated_principal)]) -> Principal:
+        if permission not in principal.permissions:
+            raise AppError("FORBIDDEN", "This operation is not permitted.", 403)
+        return principal
+
+    return dependency
 
 
-def require_employee_registrar(principal: Principal = Depends(authenticated_principal)) -> Principal:
-    if "employees:create" not in principal.permissions:
-        raise AppError("FORBIDDEN", "Employee registration is not permitted.", 403)
-    return principal
+require_employee_reader = require_permission("employees:read:all")
+require_employee_registrar = require_permission("employees:create")

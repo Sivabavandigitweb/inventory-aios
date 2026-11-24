@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -7,10 +6,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.models import Department, Designation, Employee, EmployeeHistory, Team, User
+from app.models import AuditEvent, Department, Designation, Employee, EmployeeHistory, Team, User
 from app.schemas.employees import EmployeeCreate, EmployeeFilters, EmployeePage, EmployeeRead
+from app.services.audit import AuditEventInput
 
-AuditWriter = Callable[[Session, dict[str, object]], None]
+AuditWriter = Callable[[Session, AuditEventInput], AuditEvent]
 
 
 def employee_audit_writer() -> AuditWriter:
@@ -40,11 +40,22 @@ def register_employee(session: Session, payload: EmployeeCreate, actor_id: UUID,
             change_type="onboarding", changed_by_id=actor_id, change_source="user",
             reason="Employee registration",
         ))
-        audit(session, {
-            "actor_user_id": str(actor_id), "occurred_at": datetime.now(timezone.utc).isoformat(),
-            "entity_type": "employee", "entity_id": str(employee.id), "action": "register",
-            "previous_value": None, "new_value": result.model_dump(mode="json"),
-        })
+        audit(
+            session,
+            AuditEventInput(
+                actor_user_id=actor_id,
+                action="register",
+                entity_type="employee",
+                entity_id=employee.id,
+                change_source="user",
+                metadata={
+                    "changed_fields": [
+                        "employee_number", "first_name", "last_name", "department_id",
+                        "team_id", "designation_id", "joining_date",
+                    ]
+                },
+            ),
+        )
         session.flush()
         session.commit()
         return result

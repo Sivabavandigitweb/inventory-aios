@@ -77,3 +77,14 @@ def test_role_without_approved_permission_is_denied() -> None:
 
 
 
+
+
+def test_expired_credentials_are_rejected_as_unauthorized() -> None:
+    session = MagicMock()
+    with pytest.raises(AppError) as error:
+        authenticate_principal(
+            "expired-token", FakeVerifier(failure=InvalidCredential()), session, FakePolicy()
+        )
+    assert error.value.status_code == 401
+    assert error.value.code == "INVALID_CREDENTIALS"
+    session.get.assert_not_called()

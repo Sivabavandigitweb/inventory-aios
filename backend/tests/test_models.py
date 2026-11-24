@@ -4,6 +4,7 @@ from app.models import Base
 
 EXPECTED_TABLES = {
     "asset_categories",
+    "public.audit_events",
     "departments",
     "designations",
     "employee_history",
@@ -70,7 +71,7 @@ def test_asset_category_tracking_mode_is_constrained() -> None:
 
 def test_timestamps_are_non_nullable_on_core_tables() -> None:
     for table_name, table in Base.metadata.tables.items():
-        if table_name == "user_roles":
+        if table_name in {"user_roles", "public.audit_events"}:
             continue
         assert table.c.created_at.nullable is False
         assert table.c.updated_at.nullable is False
@@ -95,6 +96,22 @@ def test_history_requires_actor_for_user_source_and_allows_explicit_sources() ->
 
 def test_timestamp_columns_have_orm_update_support() -> None:
     for table_name, table in Base.metadata.tables.items():
-        if table_name == "user_roles":
+        if table_name in {"user_roles", "public.audit_events"}:
             continue
         assert table.c.updated_at.onupdate is not None
+
+
+def test_audit_events_have_actor_source_checks_and_query_indexes() -> None:
+    table = Base.metadata.tables["public.audit_events"]
+    constraints = {constraint.name for constraint in table.constraints}
+    indexes = {index.name for index in table.indexes}
+
+    assert {
+        "actor_user_id", "action", "entity_type", "entity_id", "occurred_at",
+        "change_source", "metadata",
+    }.issubset(table.c.keys())
+    assert "ck_audit_events_change_source" in constraints
+    assert "ck_audit_events_user_actor" in constraints
+    assert "ck_audit_events_metadata_valid" in constraints
+    assert "ix_audit_events_actor_occurred" in indexes
+    assert "ix_audit_events_entity_occurred" in indexes

@@ -1,6 +1,7 @@
 from app.models.base import Base
 from app.models.core import (
     AssetCategory,
+    AuditEvent,
     Department,
     Designation,
     Employee,
@@ -14,6 +15,7 @@ from app.models.core import (
 )
 
 __all__ = [
+    "AuditEvent",
     "AssetCategory",
     "Base",
     "Department",

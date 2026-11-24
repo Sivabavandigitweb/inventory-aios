@@ -34,7 +34,7 @@ Types below are conceptual PostgreSQL types; exact SQLAlchemy mappings and namin
 | `repairs` | `id`, asset_id FK, reported_at, reported_by FK, repair_date, repair_cost, service_provider_id FK, status, notes | Damage/repair history; asset status transition is service-controlled. |
 | `disposals` | `id`, asset_id/lot_id FK, requested_by FK, approved_by FK, disposal_date, method, reason, status, evidence | Retained disposal record; no hard delete of asset history. Disposal policy and methods are pending. |
 | `approvals` | `id`, subject_type, subject_id, workflow_type, status, requested_by FK, decided_by FK, decided_at, comment | Generic approval request linked to registration, allocation, return, or disposal; concrete FK strategy must be chosen during implementation. |
-| `audit_events` | `id`, actor_user_id FK, occurred_at, entity_type, entity_id, action, previous_value jsonb, new_value jsonb, request_id | Append-only audit record for R-11; sensitive-field redaction policy pending. |
+| `audit_events` | `id uuid PK`, nullable `actor_user_id FK` (required for user source), action, entity_type, entity_id uuid, occurred_at, change_source, metadata jsonb | Append-only event envelope for R-11. Metadata allowlist excludes before/after values pending approved confidentiality/redaction policy. See `docs/architecture/audit-logging.md`. |
 | `notifications` | `id`, recipient_user_id/role, event_type, subject_type/id, status, channel, scheduled_at, sent_at, failure_reason | In-app/outbox record for reminders and delivery tracking. |
 | `warranty_alerts` | `id`, asset_id FK, due_at, status, generated_at, notification_id FK | Prevent duplicate warranty reminders; exact lead time is pending. |
 | `report_exports` | `id`, report_type, requested_by FK, filters jsonb, status, storage_key, created_at, expires_at | Asynchronous report/export tracking; expiration policy pending. |
@@ -197,3 +197,56 @@ The database deliberately does not enforce these values or transitions yet. Mana
 ## Authentication schema gap (proposed; not migrated)
 
 The current core schema does not store passwords, external identity subjects, login sessions, or revoked-session state. The recommended approach is company-managed OIDC without application-managed passwords, plus stable external identity mapping and hashed opaque session tokens if immediate application logout/revocation is required. Proposed additions are `user_identities` (unique issuer/subject mapped to `users.id`) and `auth_sessions` (user, token hash, timestamps, expiry, revocation, minimal client metadata). These proposals require identity/security approval and an Alembic review before implementation. No schema change has been made. Existing `user_roles.valid_from`/`valid_to` records support assignment validity only; they are not authentication sessions.
+
+
+## Audit event foundation
+
+The ORM and proposed migration define `public.audit_events` with actor attribution, event/entity identifiers, database timestamp, source, and JSONB metadata checked by a schema-qualified immutable database function against the same allowlist as the application. Append-only triggers reject update, delete, and truncate. The event writer joins the caller transaction and never commits independently. Before/after business values remain unresolved because R-11 needs them but no safe field-level redaction policy has been approved. The migration downgrade refuses to drop non-empty audit history. See `docs/architecture/audit-logging.md`.
+
+
+## Database role separation preparation (Task 7D.1E.1)
+
+No role, ownership, or grant changes have been executed. The following is a review plan for a later approved rehearsal on `inventory_aios_restore_check`; it is not execution authorization. PostgreSQL roles and role memberships are cluster-wide. Database CONNECT grants, schema grants, object ownership, object ACLs, and default privileges are database-scoped (default privileges are per creating role and optionally schema).
+
+### Existing role handling and membership
+
+`inventory_aios_app` already exists. Inspect its attributes, memberships, ownership, and grants; do not recreate it. Review whether the proposed owner and migrator names already exist before any cluster-wide role statement. `inventory_aios_owner` should be `NOLOGIN`. The migrator should have no superuser, database creation, role creation, replication, or row-security bypass capability. Configure its membership explicitly with `INHERIT FALSE` and `SET TRUE` (PostgreSQL versions supporting membership options):
+
+```sql
+-- Cluster-wide; administrator action after conflict and dependency review.
+GRANT inventory_aios_owner TO inventory_aios_migrator WITH INHERIT FALSE, SET TRUE;
+```
+
+This permits an explicit `SET ROLE` while preventing automatic privilege inheritance. Verify role attributes and membership options from `pg_roles` and `pg_auth_members` after any approved change. Do not grant owner membership to the application login.
+
+### Ownership and privilege inventory
+
+Before proposing any transfer, inventory the target database owner, `public` schema owner, application tables, partitioned tables, sequences, views, materialized views, types, and functions (including signatures), plus ACLs and dependencies. Review ownership of the database and schema separately: do not transfer the shared `public` schema or database owner by default. Transfer only confirmed application objects to `inventory_aios_owner`; ownership changes are not equivalent to grants and can affect other users, dependencies, and operational tooling. Avoid broad `REASSIGN OWNED` unless a complete cluster-wide impact review approves it.
+
+Inspect existing PUBLIC grants and inherited role grants. PostgreSQL commonly grants PUBLIC function EXECUTE by default. For functions created by `inventory_aios_owner`, remove that global default explicitly (no `IN SCHEMA` clause), since per-schema default privilege revokes cannot cancel a global default grant; then add narrowly scoped schema defaults only if approved. Revoke existing PUBLIC EXECUTE from the reviewed application functions individually or with a carefully reviewed schema-scoped statement. Review other database/schema/table PUBLIC grants rather than applying blanket revocations that could break unrelated users.
+
+```sql
+-- Database-specific default privileges for future objects created as owner.
+ALTER DEFAULT PRIVILEGES FOR ROLE inventory_aios_owner
+    REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE inventory_aios_owner IN SCHEMA public
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE inventory_aios_owner IN SCHEMA public
+    REVOKE ALL ON SEQUENCES FROM PUBLIC;
+```
+
+Default privileges do not change existing objects. Enumerate and adjust current ACLs separately.
+
+### Runtime least privilege
+
+Derive grants from active application service queries and writes, not from test convenience. Current employee registration is disabled; when enabled, its database work requires reads of user/organization references and inserts into employees, employee_history, and audit_events. Read access for actual list/get workflows must be mapped table by table. Grant only the required SELECT and INSERT on those tables; grant no runtime UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER, schema CREATE, ownership, or ability to assume the owner. Existing sequence use must be verified before granting sequence privileges; the core migration uses UUID server defaults. Future audit_events access is pending the later migration and approved workflow.
+
+The runtime process loads only `.env`. Alembic loads its migration URL from the separate ignored `.migration.env`; the integration harness loads runtime and owner test URLs from ignored `.test.env`. The checked-in `.env.example`, `.migration.env.example`, and `.test.env.example` contain placeholders only. Keep the actual migrator secret out of the runtime service environment.
+
+`employee_history` must remain append-only: runtime has at most SELECT and INSERT, while UPDATE, DELETE, and TRUNCATE are denied by ACL and its trigger. Runtime cannot own the table, alter/disable triggers, or replace trigger functions. Owner-level trigger tests use the separately configured migration identity to assume owner; runtime permission tests use only `inventory_aios_app`. Do not widen runtime grants to make owner-level fixtures pass.
+
+### Rehearsal and recovery boundaries
+
+Use only the disposable `inventory_aios_restore_check` database for a future approved rehearsal. Confirm its backup, revision, object inventory, and schema comparison first. Role creation and membership are cluster-wide even during this rehearsal; all grants and ownership transfers must target only that database's confirmed application objects. Test runtime and migration connections independently, verify denied DDL and history mutation as runtime, and verify approved migration object ownership after explicit owner assumption. Never execute these proposed statements against `inventory_aios_dev` as part of rehearsal.
+
+Before any later rollout, retain a verified pre-change backup and catalog inventory. Recovery should restore the database backup or explicitly restore reviewed database-specific owners and ACLs; do not use `DROP OWNED` or delete cluster roles until all database dependencies, memberships, and owned objects are reviewed.

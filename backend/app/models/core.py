@@ -4,6 +4,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -206,6 +207,48 @@ class EmployeeHistory(TimestampMixin, Base):
             "change_source <> 'user' OR changed_by_id IS NOT NULL",
             name="ck_employee_history_user_actor",
         ),
+    )
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
+    )
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    change_source: Mapped[str] = mapped_column(String(20), nullable=False)
+    event_metadata: Mapped[dict[str, object]] = mapped_column(
+        "metadata", JSONB().with_variant(JSON(), "sqlite"), nullable=False,
+        server_default=text("'{}'"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "change_source IN ('user', 'system', 'import')",
+            name="ck_audit_events_change_source",
+        ),
+        CheckConstraint(
+            "change_source <> 'user' OR actor_user_id IS NOT NULL",
+            name="ck_audit_events_user_actor",
+        ),
+        CheckConstraint("length(trim(action)) > 0", name="ck_audit_events_action_nonempty"),
+        CheckConstraint("length(trim(entity_type)) > 0", name="ck_audit_events_entity_type_nonempty"),
+        CheckConstraint(
+            "public.inventory_aios_audit_metadata_is_valid(metadata)",
+            name="ck_audit_events_metadata_valid",
+        ),
+        Index("ix_audit_events_actor_occurred", "actor_user_id", "occurred_at"),
+        Index("ix_audit_events_entity_occurred", "entity_type", "entity_id", "occurred_at"),
+        {"schema": "public"},
     )
 
 

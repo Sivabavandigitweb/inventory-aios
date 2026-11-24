@@ -12,6 +12,7 @@ from app.db.session import get_db_session
 from app.main import app
 from app.models import Department, Designation, Team, User
 from app.schemas.employees import EmployeeCreate, EmployeeFilters
+from app.services.audit import write_audit_event
 from app.services.employees import get_employee, list_employees, register_employee
 
 
@@ -146,10 +147,20 @@ def test_failed_registration_rolls_back_without_returning_details(
         Designation: SimpleNamespace(id=create_payload.designation_id),
     }.get(model)
     session.scalar.return_value = None
-    session.flush.side_effect = lambda: setattr(session.new[0], "id", uuid4())
+    flush_calls = 0
 
-    def fail_audit(*_args):
-        raise RuntimeError("synthetic audit failure")
+    def fail_during_audit_flush():
+        nonlocal flush_calls
+        flush_calls += 1
+        if flush_calls == 1:
+            session.new[0].id = uuid4()
+            return
+        raise RuntimeError("synthetic audit storage failure")
+
+    session.flush.side_effect = fail_during_audit_flush
+
+    def fail_audit(session_arg, event):
+        write_audit_event(session_arg, event)
 
     with pytest.raises(AppError) as error:
         register_employee(session, create_payload, actor_id, fail_audit)
@@ -171,3 +182,14 @@ def test_validation_error_does_not_echo_submitted_values(client: TestClient) -> 
     assert all("input" not in item for item in details)
 
 
+
+
+def test_employee_read_permission_is_denied_without_explicit_grant(client: TestClient) -> None:
+    from app.core.authorization import authenticated_principal
+
+    app.dependency_overrides[authenticated_principal] = lambda: Principal(
+        user_id=uuid4(), permissions=frozenset()
+    )
+    response = client.get("/api/v1/employees")
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"

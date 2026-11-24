@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+.migration.env
+.test.env
 *.env.local
 
 # Local PostgreSQL backups

@@ -31,3 +31,39 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+class MigrationSettings(BaseSettings):
+    """Settings loaded only by Alembic, from its separate local secret file."""
+
+    migration_database_url: str | None = None
+
+    model_config = SettingsConfigDict(
+        env_file=".migration.env",
+        env_prefix="INVENTORY_",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+
+class IntegrationTestSettings(BaseSettings):
+    """Settings loaded only by explicitly selected integration tests."""
+
+    database_url: str | None = None
+    owner_database_url: str | None = None
+
+    model_config = SettingsConfigDict(
+        env_file=".test.env",
+        env_prefix="INVENTORY_TEST_",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+
+@lru_cache
+def get_migration_settings() -> MigrationSettings:
+    return MigrationSettings()
+
+
+@lru_cache
+def get_integration_test_settings() -> IntegrationTestSettings:
+    return IntegrationTestSettings()
