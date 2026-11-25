@@ -14,6 +14,7 @@ from app.models.core import (
     User,
     UserRole,
 )
+from app.models.idempotency import IdempotencyRequest
 
 __all__ = [
     "AuditEvent",
@@ -24,6 +25,7 @@ __all__ = [
     "Employee",
     "EmployeeHistory",
     "InventoryProduct",
+    "IdempotencyRequest",
     "Location",
     "Receipt",
     "Role",

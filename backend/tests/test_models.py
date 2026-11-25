@@ -6,6 +6,7 @@ EXPECTED_TABLES = {
     "asset_categories",
     "public.audit_events",
     "public.inventory_products",
+    "public.idempotency_requests",
     "public.receipts",
     "departments",
     "designations",
