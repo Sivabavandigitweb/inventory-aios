@@ -16,12 +16,12 @@ describe('Inventory AIOS application shell', () => {
     expect(screen.getByRole('link', { name: 'Employees' })).toBeInTheDocument()
   })
 
-  it('navigates to a placeholder page from the sidebar', () => {
+  it('navigates to the asset preview from the sidebar', async () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('link', { name: 'Assets' }))
 
     expect(screen.getByRole('heading', { name: 'Assets' })).toBeInTheDocument()
-    expect(screen.getByText('Asset registry and receiving workflows')).toBeInTheDocument()
+    expect(await screen.findByRole('table', { name: 'Fictional individual asset directory' })).toBeInTheDocument()
   })
 })
