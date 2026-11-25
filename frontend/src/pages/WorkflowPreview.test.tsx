@@ -1,20 +1,25 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockAssetProvider } from '../assets/mockAssetProvider'
 import { mockEmployeeProvider } from '../employees/mockEmployeeProvider'
 import { mockWorkflowProvider } from '../workflows/mockWorkflowProvider'
-import { validateWorkflowBundle } from '../workflows/useWorkflowPreview'
 import type { WorkflowPreviewProvider } from '../workflows/types'
+import { validateWorkflowBundle } from '../workflows/useWorkflowPreview'
 import { AllocationsPage } from './AllocationsPage'
+import { ReturnsPage } from './ReturnsPage'
 
 beforeEach(() => { window.history.pushState({}, '', '/allocations') })
 async function allocationsReady() {
   render(<AllocationsPage />)
   return screen.findByRole('table', { name: 'Fictional allocation directory' })
 }
+async function returnsReady() {
+  render(<ReturnsPage />)
+  return screen.findByRole('table', { name: 'Fictional return directory' })
+}
 
 describe('fictional workflow references', () => {
-  it('links allocations and returns to shared-provider records without conflicting custody', async () => {
+  it('links every allocation and return to existing shared-provider records with no conflicting custody', async () => {
     const assets = await mockAssetProvider.load()
     const employees = (await mockEmployeeProvider.listEmployees({ offset: 0, limit: 1000 })).items
     const workflow = await mockWorkflowProvider.load()
@@ -119,5 +124,72 @@ describe('Allocation Management preview', () => {
     render(<AllocationsPage workflowProvider={failed} />)
     expect(await screen.findByRole('alert')).toHaveTextContent('Allocation preview is unavailable.')
     expect(screen.queryByText('DEMO-ALLOC-001')).not.toBeInTheDocument()
+  })
+})
+
+describe('Return Management preview', () => {
+  it('renders fictional linked records and summary without backend requests', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    try {
+      const table = await returnsReady()
+      expect(screen.getByRole('heading', { name: 'Returns' })).toBeInTheDocument()
+      expect(screen.getByText('Fictional preview data')).toBeInTheDocument()
+      expect(within(table).getByText('DEMO-RETURN-001')).toBeInTheDocument()
+      const summary = screen.getByRole('region', { name: 'Return preview summary' })
+      expect(within(summary).getAllByText('6')).toHaveLength(3)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally { fetchSpy.mockRestore() }
+  })
+
+  it('searches, filters and paginates return examples', async () => {
+    await returnsReady()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    expect(screen.getByText('DEMO-RETURN-006')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search returns' }), { target: { value: 'DEMO-ALLOC-003' } })
+    expect(screen.getByText('Showing 1–1 of 1 · Page 1 of 1')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search returns' }), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Department'), { target: { value: mockEmployeeProvider.departments[0].id } })
+    expect(screen.getByText('Showing 1–3 of 3 · Page 1 of 1')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Receiving location'), { target: { value: 'Demo North Store' } })
+    expect(screen.getByText('Showing 1–2 of 2 · Page 1 of 1')).toBeInTheDocument()
+  })
+
+  it('shows return details without inventing approval or exit clearance', async () => {
+    await returnsReady()
+    fireEvent.click(screen.getByRole('button', { name: 'View return DEMO-RETURN-001' }))
+    const dialog = screen.getByRole('dialog', { name: 'DEMO-RETURN-001' })
+    expect(within(dialog).getByText('DEMO-ALLOC-003')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Demo Verifier/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/No post-return lifecycle change/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close panel' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('links a fictional current allocation in the return preview and keeps submission disabled', async () => {
+    await returnsReady()
+    fireEvent.click(screen.getByRole('button', { name: 'Record Return preview' }))
+    const dialog = screen.getByRole('dialog', { name: 'Record Return preview' })
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: 'Search allocations' }), { target: { value: 'DEMO-ALLOC-001' } })
+    expect(within(dialog).getByRole('option', { name: /DEMO-ALLOC-001/ })).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText('Select fictional allocation'), { target: { value: 'DEMO-ALLOC-001' } })
+    expect(within(dialog).getByText(/Mira Vale/)).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Return date')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Asset condition observation')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Submit return (unavailable)' })).toBeDisabled()
+  })
+
+  it('shows loading, empty and error states without fallback', async () => {
+    const pending: WorkflowPreviewProvider = { load: () => new Promise(() => {}) }
+    const loading = render(<ReturnsPage workflowProvider={pending} />)
+    expect(screen.getByText('Loading return preview…')).toBeInTheDocument()
+    loading.unmount()
+    const empty: WorkflowPreviewProvider = { load: async () => ({ allocations: [], returns: [] }) }
+    const noData = render(<ReturnsPage workflowProvider={empty} />)
+    expect(await screen.findByText('No return examples found.')).toBeInTheDocument()
+    noData.unmount()
+    const failed: WorkflowPreviewProvider = { load: async () => { throw new Error('local failure') } }
+    render(<ReturnsPage workflowProvider={failed} />)
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Return preview is unavailable.'))
+    expect(screen.queryByText('DEMO-RETURN-001')).not.toBeInTheDocument()
   })
 })
