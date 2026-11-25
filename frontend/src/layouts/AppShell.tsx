@@ -5,7 +5,7 @@ import { navigationItems } from '../components/navigation'
 export function AppShell() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const location = useLocation()
-  const currentPage = navigationItems.find((item) => location.pathname.startsWith(item.to))
+  const currentPage = navigationItems.find((item) => location.pathname === item.to)
 
   return (
     <div className="app-shell">
@@ -22,12 +22,13 @@ export function AppShell() {
             <span className="brand-caption">Asset operations</span>
           </div>
         </div>
-        <nav className="nav-list">
+        <nav className="nav-list" aria-label="Main modules">
           <span className="nav-section-label">Workspace</span>
           {navigationItems.slice(0, 6).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
+              end
               className={({ isActive }) => `nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => setIsSidebarOpen(false)}
             >
@@ -40,6 +41,7 @@ export function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
+              end
               className={({ isActive }) => `nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => setIsSidebarOpen(false)}
             >
@@ -49,15 +51,15 @@ export function AppShell() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span className="status-dot" aria-hidden="true" />
-          <span>Workspace ready</span>
+          <span className="status-dot preview-dot" aria-hidden="true" />
+          <span>Preview mode</span>
         </div>
       </aside>
 
       <div className="main-column">
         <header className="topbar">
           <button className="menu-button" type="button" aria-label="Open navigation" onClick={() => setIsSidebarOpen(true)}>
-            <span aria-hidden="true">☰</span>
+            <span aria-hidden="true">&#9776;</span>
           </button>
           <div className="breadcrumb" aria-label="Breadcrumb">
             <span>Workspace</span>
@@ -65,13 +67,13 @@ export function AppShell() {
             <strong>{currentPage?.label ?? 'Dashboard'}</strong>
           </div>
           <div className="topbar-actions">
-            <button className="icon-button" type="button" aria-label="View notifications">
-              <span aria-hidden="true">♢</span>
-              <span className="notification-dot" aria-hidden="true" />
+            <button className="icon-button" type="button" aria-label="Notifications unavailable" title="No notification service is connected" disabled>
+              <span aria-hidden="true">&#9825;</span>
+
             </button>
-            <div className="user-menu" aria-label="Current user">
-              <span className="avatar" aria-hidden="true">AD</span>
-              <span className="user-copy"><strong>Admin</strong><small>Administrator</small></span>
+            <div className="user-menu" aria-label="Preview session">
+              <span className="avatar" aria-hidden="true">PV</span>
+              <span className="user-copy"><strong>Preview session</strong><small>Authentication not connected</small></span>
             </div>
           </div>
         </header>
