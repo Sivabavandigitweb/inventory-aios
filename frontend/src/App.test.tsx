@@ -37,4 +37,11 @@ describe('Inventory AIOS application shell', () => {
     expect(screen.getByRole('heading', { name: 'Assets' })).toBeInTheDocument()
     expect(await screen.findByRole('table', { name: 'Fictional individual asset directory' })).toBeInTheDocument()
   })
-})
+
+  it('navigates to Exit Clearance from the sidebar', async () => {
+    render(<App />)
+    const link = screen.getByRole('link', { name: 'Exit Clearance' })
+    expect(link).toHaveAttribute('href', '/exit-clearance')
+    fireEvent.click(link)
+    expect(await screen.findByRole('table', { name: 'Fictional employee clearance directory' })).toBeInTheDocument()
+  })})
