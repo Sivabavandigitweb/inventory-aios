@@ -1,10 +1,18 @@
 # PostgreSQL Schema Plan
 
+## Task 8B offline model status
+
+The independent `public.inventory_products` catalog and `public.receipts` header are now registered in SQLAlchemy metadata only. No migration or operational workflow is implemented. Receipt lines, assets and lots remain deferred rather than represented by incomplete models. The shared idempotency core was implemented offline in Task 8D; see the Task 8D status below. See [scope and migration preparation](../implementation/asset-model-foundation.md).
+
 ## Design status
 
 This is a normalized planning model for PostgreSQL with SQLAlchemy 2 and Alembic. It preserves current state and history without treating the PDF’s missing policies as settled. It supports both individually tracked assets and quantity-based inventory.
 
 PostgreSQL is the authoritative operational store. Grok, the frontend, document storage, and notification providers access it only through authorized FastAPI services or adapters.
+
+## Task 8A asset design refinement (proposed)
+
+The [asset foundation design](asset-foundation-design.md) is the detailed review draft for asset columns, constraints, numbering, quantity journal/balances, registration history and future relationships. Its asset-specific contracts supersede conflicting shorthand below: product tracking mode derives from the existing category; procurement facts stay on receipt lines; lots have separate location balances; serial uniqueness is undecided; quantity allocations can have multiple partial returns. The conceptual overview is not an implemented schema. No new model or migration is authorized yet. See the [asset implementation plan](../implementation/asset-foundation-plan.md) for API, permission, migration and test gates.
 
 ## Core tables
 
@@ -26,7 +34,7 @@ Types below are conceptual PostgreSQL types; exact SQLAlchemy mappings and namin
 | `inventory_products` | `id`, category FK, `sku`, brand, model, specifications, tracking_mode | Normalized product/model data for repeated quantity items and tracked assets. Unique SKU policy is pending. |
 | `receipts` | `id`, receipt_number, received_at, received_by FK, location_id FK, status, notes | Header for a new asset receiving event. Receipt approval policy pending. |
 | `receipt_lines` | `id`, receipt_id FK, product_id FK, quantity, unit_cost, purchase_date, supplier_id FK, warranty fields, specifications | Quantity and procurement details; check quantity > 0 and money non-negative. |
-| `assets` | `id uuid PK`, `asset_number UNIQUE`, product_id FK, serial_number, status, purchase_date, supplier_id, warranty fields, purchase_cost, current_location_id, source_receipt_line_id | One row per individually tracked unit; serial uniqueness when present; disposed rows are retained. |
+| `assets` | `id uuid PK`, `asset_number UNIQUE`, product_id FK, serial_number, status, purchase_date, supplier_id, warranty fields, purchase_cost, current_location_id, source_receipt_line_id | One row per individually tracked unit; serial uniqueness scope pending approval; disposed rows are retained. |
 | `inventory_lots` | `id`, product_id FK, location_id FK, source_receipt_line_id FK, quantity_on_hand, quantity_reserved | Quantity-based stock; checks non-negative and transactionally updated. |
 | `asset_documents` | `id`, asset_id/receipt_id/repair_id/return_id FK nullable, storage_key, checksum, media_type, size_bytes, uploaded_by FK | Metadata only; binary content stays behind a private document adapter. At least one parent reference required. |
 | `allocations` | `id`, employee_id FK, asset_id FK nullable, lot_id FK nullable, quantity, allocation_date, assigned_by FK, condition, status | Asset-to-employee assignment. Exactly one of asset or lot is required; tracked assets cannot have overlapping active allocations. |
@@ -59,7 +67,7 @@ Types below are conceptual PostgreSQL types; exact SQLAlchemy mappings and namin
 - Monetary values are non-negative `numeric` values with an agreed currency policy.
 - Asset allocation requires exactly one of `asset_id` or `lot_id`; tracked allocation quantity is one.
 - A tracked asset cannot have two active allocations; enforce with a partial unique index or equivalent transaction-safe service check.
-- `returns.verified_by` is required when a return is finalized; a returned asset cannot remain actively allocated.
+- `returns.verified_by` is required when a return is finalized; a fully verified returned asset cannot remain actively allocated; quantity returns may be partial.
 - Disposal finalization requires approval and evidence fields according to the approved policy.
 - Audit events are append-only to the application role; corrections are compensating events, not updates.
 
@@ -141,50 +149,26 @@ Outstanding means any active allocation for the employee, any exit item with rem
 
 No exception path is enabled by the confirmed PDF requirement. If management later requires an exception workflow, the proposed shape is `EXCEPTION_REQUESTED -> EXCEPTION_APPROVED` or `EXCEPTION_REJECTED`, with a named approver, reason, evidence, affected item, and audit event. `EXCEPTION_APPROVED` would be the only proposed state allowed to resolve an item without a normal verified return, and it must remain disabled until management explicitly approves the policy and authority.
 
-## Architectural gap resolution: request idempotency (proposed design)
+## Shared idempotency foundation ? Task 8D offline status
 
-Idempotency is a technical safety control, not a business approval policy. It prevents retries from creating duplicate receiving, allocation, return, approval, disposal, or exit effects.
+The [Task 8D implementation note](../implementation/idempotency-foundation.md) records the model, pure fingerprinting and replay decision components. The management [decision register](../requirements/asset-business-decisions.md) keeps ABD-13 retention pending. This foundation is not migrated, granted or enabled. Its mechanics are technical proposals derived from R-01/R-03/R-10/R-11/R-16, not separate requirements stated by the PDF.
 
-### Proposed table
+`public.idempotency_requests` has `id uuid PK`, `principal_id uuid FK users ON DELETE RESTRICT`, `operation_scope varchar(200)`, `idempotency_key varchar(200)`, `request_fingerprint varchar(64)`, `status varchar(20)`, `response_status smallint nullable`, `resource_type varchar(80) nullable`, `resource_id uuid nullable`, `completed_at timestamptz nullable`, and standard created/updated timestamps. It stores no request body, full response, authentication token, password, error cache, expiry date or cleanup schedule. Unique `(principal_id,operation_scope,idempotency_key)` scopes claims to a local authenticated user and versioned command. Named CHECKs require nonblank scope/key, lowercase SHA-256 syntax, processing/succeeded status, a complete successful result, and paired resource reference fields. PostgreSQL enforcement awaits a future migration and integration tests.
 
-| Table | Key columns | Purpose |
-|---|---|---|
-| `idempotency_requests` | `id uuid PK`, `principal_id FK`, `operation_scope`, `idempotency_key`, `request_fingerprint`, `status`, `response_status`, `response_body jsonb nullable`, `resource_type nullable`, `resource_id nullable`, `created_at`, `updated_at`, `completed_at nullable`, `expires_at`, `error_code nullable` | Stores the request claim, canonical payload fingerprint, processing/result state, replayable response, and retention deadline. |
+The caller's business change, audit event, claim and minimal success result must share one transaction. A failed command rolls back all of them. No independent commit is allowed and a durable processing row is an integrity incident, not an automatic lease to recover. The pure service only decides execute/replay/conflict from a caller-supplied snapshot after injected current authorization checks; it makes no database claim and proves no concurrency guarantee. A future runner must handle unique-key races, bounded waits, rollback and post-commit replay with real PostgreSQL connections. A repeated key with changed content is a conflict; business uniqueness/approval checks still apply when a different key is used. Replay returns only the minimal status/resource reference after current operation and resource authorization are checked.
 
-### Key and fingerprint rules
+Canonical request fingerprinting includes a versioned scope, sorts object keys, preserves list order, distinguishes types, normalizes finite decimals and aware datetimes, and rejects unsupported data or sensitive field names with generic errors. SHA-256 does not hide low-entropy input; keep fingerprints internal and access-controlled. Retention and safe cleanup are pending ABD-13, so no expiry default or deletion behavior was implemented. Inventory receiving, allocation, return, approval, disposal and employee-exit commands must define their own scope, authorized result visibility and transaction boundary before activation. AI-suggested operations must traverse the same backend rules.
 
-- The unique scope is `(principal_id, operation_scope, idempotency_key)`. `operation_scope` includes HTTP method, normalized route family, and any resource identifier that changes the command meaning.
-- The client supplies the key in an `Idempotency-Key` header for important commands. The backend canonicalizes the validated request body and relevant command parameters, then stores a cryptographic fingerprint.
-- A repeated key with the same scope and identical fingerprint replays the stored successful or permanent-failure response without repeating the business operation.
-- A repeated key with a different fingerprint is rejected as a conflict; it cannot mutate or reuse the original request.
-- A request still marked `PROCESSING` returns a deterministic in-progress response or waits under a bounded policy. It never starts a second business transaction.
-
-### Transaction, crash, and failure behavior
-
-- The idempotency claim and the business write share one database transaction for each command. A unique-key conflict loads the existing row and compares the fingerprint.
-- The first request inserts `PROCESSING`, performs authorization and validation, executes the business transaction, records audit events, stores the response/resource reference, and commits as `SUCCEEDED`.
-- A permanent client error can commit as `FAILED` with its safe response and no business mutation; the same key replays that error. A corrected request uses a new key.
-- A transient server/database failure rolls back the business write and the idempotency claim together, allowing a retry with the same key. Recovery of an orphaned `PROCESSING` row uses `expires_at` and a bounded reconciliation rule; it must never blindly replay a partially committed business effect.
-- If the server crashes after commit but before responding, the retry finds `SUCCEEDED` and returns the stored response/resource reference.
-- Response bodies must exclude secrets and sensitive data not already authorized for the principal.
-
-### Retention and expiry
-
-`expires_at`, response retention, cleanup method, and whether audit references outlive idempotency rows are configurable decisions. Until decided, rows must not be deleted while a request can still be retried by an active client, and cleanup must be read-only verified and auditable.
-
-### Required command coverage
-
-The strategy applies to receiving, allocation, return, approval decision, disposal request/finalization, and employee-exit commands. Each command must define its operation scope, canonical fingerprint inputs, replay response, and transaction boundary before implementation.
 ## Core safeguard implementation status
 
-The unapplied initial revision `36368303c6c6` implements the following technical safeguards for the core tables:
+The repository initial revision `36368303c6c6` implements the following technical safeguards for the core tables:
 
 - UUID primary keys retain SQLAlchemy `uuid.uuid4` defaults and add PostgreSQL `gen_random_uuid()` server defaults. The database function is used without adding an extension in this baseline; the supported PostgreSQL version must provide it.
 - `updated_at` keeps SQLAlchemy `onupdate` behavior and receives PostgreSQL `BEFORE UPDATE` triggers for database-side maintenance.
 - `employee_history` has a PostgreSQL trigger that rejects updates and deletes. Corrections are represented as new compensating history events, subject to authorization and audit rules; no exception path is enabled by this migration.
 - `employee_history.change_source` distinguishes `user`, `system`, and `import` technical sources. User-originated events require `changed_by_id`; system and import events may use a null actor only when the application records the source and reason. This is a provenance mechanism, not an approval policy.
 
-These safeguards are implemented in model metadata and migration text but have not been executed against the database. Trigger behavior remains pending integration testing after explicit migration approval.
+These safeguards are implemented in model metadata and migration text. The user reports the disposable rehearsal at revision `7d4a9c2e1b60`; Task 8A performed no database access and does not reverify the state of either database. Trigger behavior remains pending integration testing after explicit migration approval.
 
 ## Proposed status values and transitions
 

@@ -36,12 +36,26 @@ The system remains independent from Management AIOS. PostgreSQL is the operation
 | R-16 | **16. Mobile Entry & Accessibility:** provide mobile-friendly, tablet, and desktop access; quick forms for registration, allocation, employee updates, returns, and document upload at any time. | Responsive frontend, forms, documents | Must | Core forms are usable at mobile, tablet, and desktop breakpoints; keyboard and accessible-label checks pass; upload and save feedback handles offline/interruption safely. “At any time” still depends on authorized access and service availability. |
 | R-17 | **17. System Requirements:** web-based access from authorized devices; preferred login/role permissions, responsive design, QR/barcode tracking, approval workflow, automated notifications, dashboard analytics, and Excel/PDF export. | Platform, auth, all modules | Must for web/auth/responsive; preferred for QR, notifications, analytics, exports | Authorized users can log in and access permitted modules; API is versioned and secure; preferred capabilities are separately tracked and prioritized rather than assumed mandatory. |
 
+## Task 9A.2 employee synchronization direction (proposed implementation)
+
+The project direction is to receive employee master data from the company's authoritative employee system rather than create it manually in Inventory AIOS. This is an implementation decision, not a statement in the original PDF. It does not remove R-05 onboarding fields and asset links, R-06 organizational history, R-07 mandatory asset return before exit completion, R-11 audit, R-14 search, or R-16 mobile accessibility. No synchronization service or connection is implemented. See [employee synchronization architecture](../architecture/employee-synchronization.md).
+
+| Requirement | Effect of proposed synchronization | Open confirmation |
+| --- | --- | --- |
+| R-05 | Import and update employee identity, name, organization and joining date from the approved source; preserve local UUID and asset links. | Confirm authoritative source, stable key, field quality and legacy matching. |
+| R-06 | Reflect source transfers/promotions in current profile while retaining prior organization and allocation history. | Confirm effective dates, change feed and conflict ownership. |
+| R-07 | A source departure must not complete local asset exit until verified returns clear all assignments; never delete a missing source employee. | Approve source-status vocabulary, local clearance state and allocation-block policy. |
+| R-11 | Sync history and audit must be transactional and attributable to the service/source event without inventing a human actor. | Approve attribution, previous/updated values, redaction and retention. |
+| R-14/R-15 | Search and reporting continue to use linked local employee identity and authorized organization data. | Confirm freshness and report as-of semantics. |
+| R-16 | The PDF asks for mobile employee updates; source-owned fields may need a hand-off to the authoritative system instead of local edits. | Management must confirm whether that path satisfies R-16 and whether any local-only employee fields remain editable. |
+
 ## Traceability by artifact
 
 | Requirement IDs | Primary design artifact |
 |---|---|
 | R-01–R-03, R-09, R-14 | `docs/architecture/overview.md`, `docs/database/schema-plan.md` |
 | R-04–R-08 | `docs/architecture/overview.md`, `docs/architecture/roles-permissions.md`, `docs/database/schema-plan.md` |
+| R-05–R-07, R-16 | `docs/architecture/employee-synchronization.md`, `docs/implementation/employee-frontend-foundation.md` |
 | R-10–R-12 | `docs/architecture/overview.md`, `docs/architecture/roles-permissions.md` |
 | R-13–R-15 | `docs/architecture/overview.md`, `docs/implementation/phase-plan.md` |
 | R-16–R-17 | `docs/architecture/overview.md`, `docs/implementation/phase-plan.md` |

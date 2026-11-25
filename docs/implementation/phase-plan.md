@@ -30,7 +30,7 @@ This roadmap is documentation only. Each phase ends with a review checkpoint and
 
 ## Phase 3 — Employees, allocation, return, and exit
 
-**Scope:** employee onboarding, organizational history, allocation, return, employee exit, condition capture, and R-04–R-08.
+**Scope:** employee onboarding data through an approved authoritative-source synchronization, organizational history, allocation, return, employee exit, condition capture, and R-04–R-08. Manual employee creation in Inventory AIOS is no longer the proposed workflow.
 
 **Tests:** allocation availability, concurrent allocation conflict, required return before exit completion, return verification, transfer/promotion history, rollback after an interrupted multi-step operation, employee access isolation.
 
@@ -88,3 +88,38 @@ Before each important write command is released, define its operation scope, can
 - No exception transition is enabled until management explicitly approves the policy and authority.
 - No important write endpoint is released without idempotency behavior and a duplicate-effect test.
 - Idempotency cleanup and employee-exit exception handling remain configurable decisions and must be documented before operational deployment.
+
+## Task 8A asset foundation review checkpoint
+
+The security/audit foundation has technical rehearsal evidence supplied by the user; audit grants and identity/provider policy remain pending, and operational employee writes remain disabled; authoritative-source synchronization is now the proposed direction. Asset work can proceed independently as offline design and, after explicit approval, model development. Task 8A itself creates no models, migrations, permissions or enabled workflows.
+
+Review the [detailed asset schema](../database/asset-foundation-design.md) and [asset implementation plan](asset-foundation-plan.md). They refine Phase 2 and future Phase 3/4 interfaces, reuse existing masters, distinguish individual assets from quantity lots/balances, and identify numbering and policy blockers. The next asset task is review/approval of those contracts, followed by the approved offline model/test slice. Database migrations and runtime activation require subsequent authorization; R-11 remains partial and no audit/authentication policy is changed.
+
+## Task 9A.2 employee synchronization checkpoint
+
+The [employee synchronization architecture](../architecture/employee-synchronization.md) is a design proposal only. The Employees frontend keeps its fictional directory and details but removes manual registration controls and displays a disabled sync action. The existing backend POST registration route remains fail-closed and unchanged; its future removal or replacement with an internal sync command needs a separate decision and test revision. No source connection, destination migration, permission, audit write or scheduled job is enabled.
+
+Before implementing a sync adapter, verify source authority/schema/key and obtain source-owner access approval; approve source-to-local field, organization and status mappings, legacy identity matching, R-16 mobile update path and R-07 exit/clearance behavior. Then design least-privilege separate connections, durable source links and run logs, transactional history/audit/checkpoints, conflict review and idempotent recovery. Test sanitized source fixtures and disposable destination data for duplicate, out-of-order, missing, concurrent and interrupted records before enabling a schedule or manual action. Retain all local UUIDs, allocations and history; never auto-delete a missing source employee or clear exit while assets remain outstanding.
+
+## Task 9C dashboard preview checkpoint
+
+The [Inventory dashboard frontend foundation](inventory-dashboard-foundation.md) reuses the fictional asset and employee providers. It shows calculated individual-asset lifecycle, category and location distributions, per-lot quantity availability, employee overview and navigation into the existing preview pages. Operational approval, return, repair, transaction and exit metrics remain unavailable; source synchronization is not connected. The asset directory received visual-only status, condition-label, dialog, table and focus refinements. This does not complete Phase 5 reporting or enable any Phase 2–4 write workflow. Live metric definitions, approved units, source connections, authorization and integration tests remain future gates.
+
+## Task 9D allocation and return preview checkpoint
+
+The [allocation and return frontend foundation](allocation-return-frontend-foundation.md) replaces both placeholders with fictional, partial linked previews. Directories, details, search, filters, pagination and selectable forms are available; submission remains disabled. Shared employee and asset mock providers supply identities, and a separate workflow preview provider supplies only consistent example links. Employee and Asset details can navigate to the related fictional preview. This does not implement Phase 3 allocation, return or exit-clearance workflows, Phase 4 approvals/audit completion, or operational dashboard pending counts. Authorization, approval/condition decisions, migrations, transactional writes, idempotency and PostgreSQL concurrency tests remain gates before activation.
+
+## Task 9E repair frontend checkpoint
+
+The [repair frontend foundation](repair-frontend-foundation.md) adds a fictional partial R-09 preview with linked asset examples, directory search/filter/pagination, details and a disabled new-repair form. Repair group labels are illustrative only; there are no operational status transitions, provider/cost/document/approval records, database calls or maintenance schedules. Preventive maintenance was not found in the reviewed R-09 requirement. Backend repair records, approval/authority decisions, lifecycle transition rules, audit completeness, idempotent transactions and PostgreSQL integration tests remain Phase 4 gates.
+
+## Task 9F employee exit and asset clearance preview checkpoint
+
+The [employee exit frontend foundation](employee-exit-frontend-foundation.md) adds a fictional partial inventory-clearance review at /exit-clearance. It reuses employee, asset, allocation and return previews, marks return verification and final readiness unknown, and keeps completion disabled. The external employee source remains unconnected; employment status, departure and inventory clearance are separate. No exit state machine is introduced beyond documenting the schema plan's existing unapproved proposal. Operational R-07 implementation remains a Phase 3 gate requiring approved authority/exception policy, quantity obligations, authenticated source mapping, transactions, audit, idempotency and PostgreSQL concurrency/recovery tests.
+
+## Task 9G approvals and notifications preview checkpoint
+
+The [approval and notification frontend foundation](approval-notification-frontend-foundation.md) adds fictional examples for the four R-10 approval workflow types and five R-12 reminder categories. Requests are not submitted or pending operational work; reminder scenarios are not delivered messages. Decision controls remain disabled, authority and delivery are unavailable, and dashboard metrics were not represented as live zero counts. Phase 4 approval processing and Phase 5 notification delivery still require approved role/authority, separation-of-duties, evidence, timing, recipient, transaction, audit, idempotency, access-control and retry policies, followed by backend and PostgreSQL integration tests. Future Grok remains advisory and cannot decide or bypass backend authorization.
+## Task 9H reporting and analytics preview checkpoint
+
+The [reporting frontend foundation](reporting-frontend-foundation.md) provides partial, fictional reports derived from shared asset, employee, workflow, repair, clearance and approval providers. It implements R-15 asset summary, employee-wise, department-wise, allocation, return, damaged and employee-exit previews; purchase history and audit trail are explicitly unavailable without data/services. Quantity and approval previews are proposed; missing-information reporting is withheld pending completeness rules. Excel/PDF controls remain disabled despite R-17 preference. Authorization, report definitions, as-of semantics, exports, retention and audit access remain future decisions. This does not implement operational reporting or close Phase 5 reporting.
