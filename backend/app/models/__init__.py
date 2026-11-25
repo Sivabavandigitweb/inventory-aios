@@ -1,3 +1,4 @@
+from app.models.assets import InventoryProduct, Receipt
 from app.models.base import Base
 from app.models.core import (
     AssetCategory,
@@ -22,7 +23,9 @@ __all__ = [
     "Designation",
     "Employee",
     "EmployeeHistory",
+    "InventoryProduct",
     "Location",
+    "Receipt",
     "Role",
     "Supplier",
     "Team",

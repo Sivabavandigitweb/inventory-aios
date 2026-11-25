@@ -5,6 +5,8 @@ from app.models import Base
 EXPECTED_TABLES = {
     "asset_categories",
     "public.audit_events",
+    "public.inventory_products",
+    "public.receipts",
     "departments",
     "designations",
     "employee_history",
