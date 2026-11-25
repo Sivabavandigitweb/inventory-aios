@@ -4,6 +4,7 @@ import json
 import re
 import uuid
 from collections.abc import Generator
+from datetime import date
 from uuid import UUID
 
 import pytest
@@ -13,9 +14,12 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_integration_test_settings
+from app.core.errors import AppError
 from app.core.integration_test_config import require_isolated_test_url, require_owner_test_url
-from app.models import AuditEvent, User
+from app.models import AuditEvent, Department, Designation, Team, User
+from app.schemas.employees import EmployeeCreate
 from app.services.audit import AuditEventInput, write_audit_event
+from app.services.employees import employee_audit_writer, register_employee
 
 pytestmark = pytest.mark.integration
 
@@ -125,6 +129,32 @@ def _actor(session: Session) -> User:
     session.add(actor)
     session.flush()
     return actor
+
+
+def _registration(session: Session) -> tuple[User, EmployeeCreate]:
+    suffix = uuid.uuid4().hex
+    actor = User(
+        username=f"TEST_REGISTRAR_{suffix}",
+        email=f"test_registrar_{suffix}@example.invalid",
+        display_name="TEST Registrar",
+        status="active",
+    )
+    department = Department(code=f"TEST_DEPT_{suffix}", name="TEST Department")
+    designation = Designation(code=f"TEST_DESIG_{suffix}", name="TEST Designation")
+    session.add_all([actor, department, designation])
+    session.flush()
+    team = Team(department_id=department.id, code=f"TEST_TEAM_{suffix}", name="TEST Team")
+    session.add(team)
+    session.flush()
+    return actor, EmployeeCreate(
+        employee_number=f"TEST_EMP_{suffix}",
+        first_name="TEST",
+        last_name="Audit",
+        department_id=department.id,
+        team_id=team.id,
+        designation_id=designation.id,
+        joining_date=date(2026, 1, 1),
+    )
 
 
 def _read_owner_count(engine: Engine, sql: str, parameters: dict[str, object]) -> int:
@@ -316,3 +346,183 @@ def test_audit_mutation_triggers_reject_update_delete_and_truncate(
     ):
         _expect_error(owner_session, sql, {"id": row.id}, "55000")
     assert owner_session.get(AuditEvent, row.id) is not None
+
+
+def test_employee_registration_and_audit_share_uncommitted_outer_transaction(
+    owner_engine: Engine, owner_session: Session
+) -> None:
+    actor, payload = _registration(owner_session)
+    result = register_employee(owner_session, payload, actor.id, write_audit_event)
+    assert owner_session.execute(
+        text("SELECT action FROM public.audit_events WHERE entity_id=:id"),
+        {"id": result.id},
+    ).scalar_one() == "register"
+
+    assert _read_owner_count(
+        owner_engine,
+        "SELECT count(*) FROM public.employees WHERE employee_number=:number",
+        {"number": payload.employee_number},
+    ) == 0
+    assert _read_owner_count(
+        owner_engine,
+        "SELECT count(*) FROM public.audit_events WHERE entity_id=:id",
+        {"id": result.id},
+    ) == 0
+
+
+def test_audit_failure_rolls_back_employee_registration(owner_session: Session) -> None:
+    actor, payload = _registration(owner_session)
+
+    def failing_audit(session: Session, audit_input: AuditEventInput) -> AuditEvent:
+        return write_audit_event(
+            session,
+            AuditEventInput(
+                actor_user_id=None,
+                action=audit_input.action,
+                entity_type=audit_input.entity_type,
+                entity_id=audit_input.entity_id,
+                change_source="user",
+            ),
+        )
+
+    with pytest.raises(AppError) as error:
+        register_employee(owner_session, payload, actor.id, failing_audit)
+    assert error.value.code == "REGISTRATION_FAILED"
+    assert owner_session.execute(
+        text("SELECT count(*) FROM public.employees WHERE employee_number=:number"),
+        {"number": payload.employee_number},
+    ).scalar_one() == 0
+    assert owner_session.execute(
+        text("SELECT count(*) FROM public.audit_events WHERE entity_type='employee'"),
+    ).scalar_one() == 0
+
+
+def test_failed_business_validation_does_not_call_audit_writer(
+    owner_session: Session,
+) -> None:
+    actor, payload = _registration(owner_session)
+    payload = payload.model_copy(update={"team_id": uuid.uuid4()})
+    calls: list[bool] = []
+
+    def audit_spy(session: Session, audit_input: AuditEventInput) -> AuditEvent:
+        calls.append(True)
+        return write_audit_event(session, audit_input)
+
+    with pytest.raises(AppError) as error:
+        register_employee(owner_session, payload, actor.id, audit_spy)
+    assert error.value.code == "INVALID_ORGANIZATION"
+    assert calls == []
+
+
+def test_employee_registration_dependency_remains_fail_closed() -> None:
+    with pytest.raises(AppError) as error:
+        employee_audit_writer()
+    assert error.value.code == "AUDIT_UNAVAILABLE"
+    assert error.value.status_code == 503
+
+
+def test_runtime_audit_permissions_remain_denied(runtime_engine: Engine) -> None:
+    with runtime_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            assert connection.execute(
+                text("SELECT current_database(),session_user,current_user,inet_server_port()")
+            ).one() == (
+                "inventory_aios_restore_check",
+                "inventory_aios_app",
+                "inventory_aios_app",
+                5432,
+            )
+            assert connection.execute(
+                text(
+                    "SELECT has_table_privilege(current_user,'public.audit_events','SELECT'),"
+                    "has_table_privilege(current_user,'public.audit_events','INSERT'),"
+                    "has_table_privilege(current_user,'public.audit_events','UPDATE'),"
+                    "has_table_privilege(current_user,'public.audit_events','DELETE'),"
+                    "has_table_privilege(current_user,'public.audit_events','TRUNCATE'),"
+                    "has_function_privilege(current_user,"
+                    "'public.inventory_aios_audit_metadata_is_valid(jsonb)','EXECUTE')"
+                )
+            ).one() == (False, False, False, False, False, False)
+            for sql in (
+                "SELECT 1 FROM public.audit_events LIMIT 0",
+                "INSERT INTO public.audit_events "
+                "(action,entity_type,entity_id,change_source) "
+                "VALUES ('runtime.probe','audit_event',gen_random_uuid(),'system')",
+                "UPDATE public.audit_events SET action=action WHERE false",
+                "DELETE FROM public.audit_events WHERE false",
+                "TRUNCATE TABLE public.audit_events",
+                "ALTER TABLE public.audit_events DISABLE TRIGGER ALL",
+                "SET ROLE inventory_aios_owner",
+                "SET ROLE inventory_aios_migrator",
+            ):
+                with pytest.raises(DBAPIError) as error:
+                    with connection.begin_nested():
+                        connection.execute(text(sql))
+                assert _sqlstate(error.value) == "42501"
+        finally:
+            transaction.rollback()
+
+
+def test_temporary_minimum_grants_rollback_but_migrator_cannot_assume_runtime(
+    owner_engine: Engine, runtime_engine: Engine
+) -> None:
+    with owner_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            connection.execute(text("SET ROLE inventory_aios_owner"))
+            connection.execute(
+                text("GRANT INSERT ON TABLE public.audit_events TO inventory_aios_app")
+            )
+            connection.execute(
+                text(
+                    "GRANT SELECT (occurred_at) ON TABLE public.audit_events "
+                    "TO inventory_aios_app"
+                )
+            )
+            connection.execute(
+                text(
+                    "GRANT EXECUTE ON FUNCTION "
+                    "public.inventory_aios_audit_metadata_is_valid(jsonb) "
+                    "TO inventory_aios_app"
+                )
+            )
+            assert connection.execute(
+                text(
+                    "SELECT has_table_privilege('inventory_aios_app',"
+                    "'public.audit_events','INSERT'),"
+                    "has_table_privilege('inventory_aios_app',"
+                    "'public.audit_events','SELECT'),"
+                    "has_column_privilege('inventory_aios_app',"
+                    "'public.audit_events','occurred_at','SELECT'),"
+                    "has_column_privilege('inventory_aios_app',"
+                    "'public.audit_events','id','SELECT'),"
+                    "has_table_privilege('inventory_aios_app',"
+                    "'public.audit_events','UPDATE'),"
+                    "has_table_privilege('inventory_aios_app',"
+                    "'public.audit_events','DELETE'),"
+                    "has_table_privilege('inventory_aios_app',"
+                    "'public.audit_events','TRUNCATE'),"
+                    "has_function_privilege('inventory_aios_app',"
+                    "'public.inventory_aios_audit_metadata_is_valid(jsonb)',"
+                    "'EXECUTE')"
+                )
+            ).one() == (True, False, True, False, False, False, False, True)
+
+            with pytest.raises(DBAPIError) as error:
+                with connection.begin_nested():
+                    connection.execute(text("SET ROLE inventory_aios_app"))
+            assert _sqlstate(error.value) == "42501"
+        finally:
+            transaction.rollback()
+
+    with runtime_engine.connect() as connection:
+        assert connection.execute(
+            text(
+                "SELECT has_table_privilege(current_user,'public.audit_events','INSERT'),"
+                "has_column_privilege(current_user,'public.audit_events',"
+                "'occurred_at','SELECT'),"
+                "has_function_privilege(current_user,"
+                "'public.inventory_aios_audit_metadata_is_valid(jsonb)','EXECUTE')"
+            )
+        ).one() == (False, False, False)
