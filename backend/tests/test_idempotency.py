@@ -269,10 +269,11 @@ def test_in_progress_and_malformed_success_fail_closed(request_context):
         assert unavailable.value.status_code == 503
 
 
-def test_no_live_runner_or_migration_was_added():
+def test_no_live_runner_or_unexpected_migration_was_added():
     root = Path(__file__).parents[1]
     assert not (root / "app" / "services" / "idempotency_runner.py").exists()
     assert set(path.name for path in (root / "alembic" / "versions").glob("*.py")) == {
         "36368303c6c6_create_core_foundation_tables.py",
         "7d4a9c2e1b60_add_append_only_audit_events.py",
+        "0ea2d9c71b45_add_authentication_credentials_and_sessions.py",
     }
