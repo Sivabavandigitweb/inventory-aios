@@ -352,3 +352,32 @@ def test_malformed_http_bearer_is_rejected_without_local_user_lookup() -> None:
         session.get.assert_not_called()
     finally:
         app.dependency_overrides.clear()
+
+
+def test_unauthorized_employee_registration_does_not_mutate_session() -> None:
+    user_id = uuid4()
+    session = active_session(user_id)
+    session.scalars.return_value.all.return_value = ["unapproved_role"]
+    app.dependency_overrides[get_db_session] = lambda: session
+    app.dependency_overrides[get_credential_verifier] = lambda: FakeVerifier(user_id)
+    app.dependency_overrides[get_role_permission_policy] = lambda: StaticPermissionPolicy(frozenset())
+    payload = {
+        "employee_number": "TEST-10C-001",
+        "first_name": "Fictional",
+        "last_name": "Test",
+        "department_id": str(uuid4()),
+        "team_id": str(uuid4()),
+        "designation_id": str(uuid4()),
+        "joining_date": "2026-01-01",
+    }
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/employees", json=payload, headers={"Authorization": "Bearer test-token"}
+            )
+        assert (response.status_code, response.json()["error"]["code"]) == (403, "FORBIDDEN")
+        session.add.assert_not_called()
+        session.commit.assert_not_called()
+        session.scalar.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
