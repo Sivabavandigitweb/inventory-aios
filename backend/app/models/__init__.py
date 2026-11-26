@@ -1,4 +1,5 @@
 from app.models.assets import InventoryProduct, Receipt
+from app.models.authentication import AuthSession, UserPasswordCredential
 from app.models.base import Base
 from app.models.core import (
     AssetCategory,
@@ -19,6 +20,7 @@ from app.models.idempotency import IdempotencyRequest
 __all__ = [
     "AuditEvent",
     "AssetCategory",
+    "AuthSession",
     "Base",
     "Department",
     "Designation",
@@ -32,5 +34,6 @@ __all__ = [
     "Supplier",
     "Team",
     "User",
+    "UserPasswordCredential",
     "UserRole",
 ]

@@ -5,9 +5,11 @@ from app.models import Base
 EXPECTED_TABLES = {
     "asset_categories",
     "public.audit_events",
+    "public.auth_sessions",
     "public.inventory_products",
     "public.idempotency_requests",
     "public.receipts",
+    "public.user_password_credentials",
     "departments",
     "designations",
     "employee_history",
@@ -74,13 +76,13 @@ def test_asset_category_tracking_mode_is_constrained() -> None:
 
 def test_timestamps_are_non_nullable_on_core_tables() -> None:
     for table_name, table in Base.metadata.tables.items():
-        if table_name in {"user_roles", "public.audit_events"}:
+        if table_name in {"user_roles", "public.audit_events", "public.auth_sessions"}:
             continue
         assert table.c.created_at.nullable is False
         assert table.c.updated_at.nullable is False
 
 def test_uuid_primary_keys_have_application_and_postgresql_defaults() -> None:
-    for table_name in EXPECTED_TABLES - {"user_roles"}:
+    for table_name in EXPECTED_TABLES - {"user_roles", "public.user_password_credentials"}:
         column = next(iter(Base.metadata.tables[table_name].primary_key.columns))
         assert column.default is not None
         assert column.server_default is not None
@@ -99,7 +101,7 @@ def test_history_requires_actor_for_user_source_and_allows_explicit_sources() ->
 
 def test_timestamp_columns_have_orm_update_support() -> None:
     for table_name, table in Base.metadata.tables.items():
-        if table_name in {"user_roles", "public.audit_events"}:
+        if table_name in {"user_roles", "public.audit_events", "public.auth_sessions"}:
             continue
         assert table.c.updated_at.onupdate is not None
 
