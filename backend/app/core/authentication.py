@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.core.permission_catalog import is_known_capability
 from app.db.session import get_db_session
 from app.models import Role, User, UserRole
 
@@ -78,6 +79,16 @@ def authenticate_principal(
         logger.error("credential_verifier_unexpected_failure")
         raise AppError("INTERNAL_SERVER_ERROR", "An unexpected error occurred.", 500) from None
 
+    if not isinstance(user_id, UUID):
+        raise AppError("AUTHENTICATION_UNAVAILABLE", "Authentication is temporarily unavailable.", 503)
+
+    return principal_for_local_user(user_id, session, policy)
+
+
+def principal_for_local_user(
+    user_id: UUID, session: Session, policy: RolePermissionPolicy
+) -> "Principal":
+    """Resolve current account and role state for a previously authenticated local ID."""
     if not isinstance(user_id, UUID):
         raise AppError("AUTHENTICATION_UNAVAILABLE", "Authentication is temporarily unavailable.", 503)
 
@@ -154,6 +165,7 @@ def _valid_permissions(permissions: object) -> bool:
             isinstance(permission, str)
             and _PERMISSION_CODE.fullmatch(permission) is not None
             and "*" not in permission
+            and is_known_capability(permission)
             for permission in permissions
         )
     )
