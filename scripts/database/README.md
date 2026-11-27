@@ -1,6 +1,6 @@
 ﻿# Database restore verification and role rehearsal
 
-These scripts are prepared only. They have not been executed. The restore database is the only rehearsal target; none of these files should be retargeted to `inventory_aios_dev`.
+These scripts are for controlled local rehearsal. `inventory_aios_restore_check` and the separately approved `inventory_aios_restore_validation` are the only rehearsal targets; none of these files should be retargeted to `inventory_aios_dev`.
 
 ## 1. Prerequisites and secure credentials
 
@@ -148,6 +148,41 @@ Cluster-wide roles and membership are not automatically dropped during recovery.
 - Default function EXECUTE for PUBLIC is revoked for objects created by `inventory_aios_owner`; existing application function grants to PUBLIC are revoked in the rehearsal database. Never grant runtime audit INSERT until the approved audit migration has granted `EXECUTE` on `public.inventory_aios_audit_metadata_is_valid(jsonb)` to `inventory_aios_app`.
 - Database owner transfer is a separate autocommit operation because `ALTER DATABASE ... OWNER` cannot run inside a transaction. A superuser directly transfers ownership; the script grants no temporary CREATEDB and treats transfer failure or unverified owner attributes as blocking.
 - Recovery recreates the disposable database and verifies effective default ACL behavior; it cannot roll back cluster-wide roles/memberships. Review those roles, memberships, and cross-database dependencies separately before any cleanup; do not use `DROP OWNED` as routine rollback.
+
+## 7. Completed local PostgreSQL rehearsal (2026-11-27)
+
+The developer and Team Leader approved the disposable-database rehearsal. No production or development database was accessed. The retained pre-migration archive is `backups/rehearsal/inventory_aios_restore_check_pre_migrations_20261127_091308.dump`; its verified SHA-256 is `b23683d410ef3643eb53dfcd64b42585326cd57cd0d8d8e5ea89d9b30fdb8242`.
+
+- `inventory_aios_restore_validation` was restored from the archive and retained. It remains at `7d4a9c2e1b60`, owned by `inventory_aios_owner`. Read-only verification found 13 public tables, 120 constraints, 31 indexes, 13 non-internal triggers and 4 functions; all relations and functions are owner-owned. No audit or employee-history rows were present. Effective runtime ACL checks showed CONNECT and schema USAGE/read access required for employee reads, with no schema/database CREATE, employee UPDATE or audit INSERT/UPDATE/DELETE/TRUNCATE.
+- `inventory_aios_restore_check` advanced from `7d4a9c2e1b60` through `0ea2d9c71b45`, `4b6f10a2c903`, `9c81e247a610`, and `a1c7e3052b94` (head). Database and schema ownership remained `inventory_aios_owner`; the runtime role has no memberships or object ownership.
+- The narrowly scoped authentication grants were applied temporarily for the authentication PostgreSQL suite and explicitly revoked afterward. Final direct checks confirmed no runtime authentication-table access and no runtime audit writes or mutation privileges. The audit administrator grant rehearsal ran inside a rollback-only test transaction; it left no grants or audit records.
+- 47 target-guarded PostgreSQL integration tests passed across core, authentication, inventory constraints, audit, employee sync, and registration/allocation/return workflows. The separate rollback-protected audit privilege rehearsal passed 1 test. These results verify only implemented paths and do not enable authentication, audit writing, or operational inventory writes.
+- Fictional fixtures were transaction-rolled back or cleaned. Final counts for rehearsal users, employees, test categories, test products, receipts, assets, balances, approvals and audit rows were zero.
+
+The grant scripts are rehearsal tools, not authorization for production activation. The verifier `08_verify_authentication_privileges.sql` expects temporary authentication grants to be present, so it is expected to fail after the explicit post-test revocation. Re-run this section only with approval for the exact database operations, a verified recovery path, and an approved backup. Never substitute `inventory_aios_dev` or production. Do not use Alembic downgrade as routine rollback; revisions intentionally refuse destructive downgrade when protected records exist.
+
+## 8. Task F.1C.1 operational grant draft (not applied)
+
+`09_operational_runtime_grants.sql` and `10_revoke_operational_runtime_grants.sql` are prepared-only drafts guarded to `inventory_aios_restore_check`, migrator-to-owner execution, and revision `b2d4f6a8c013`. The draft limits the app role to named application tables, omits employee-source synchronization writes, keeps credential rows read-only, limits session mutations to activity/revocation, makes audit append-only, and denies schema/database creation and role escalation. The matching revocation file removes the draft's grants while preserving the baseline user/role/employee read grants. Neither file has been executed or validated against an approved full application privilege matrix. Review the listed table operations against every production repository, capture the pre-grant ACL state, and obtain separate approval before any rehearsal or persistent grant. Exact user-to-role/capability assignments, custom repair currency codes, MFA policy, and distributed login-rate settings remain unresolved; database grants do not authorize a user operation.
+
+## 9. Task F.1C.2 shared attempt protection grant draft (not applied)
+
+Revision `c4e2b7a91d60` adds `public.auth_login_attempt_buckets` and the bounded `public.inventory_aios_cleanup_login_attempts(integer, integer)` cleanup function. The operational grant/revocation drafts now guard against this revision and include only the named bucket operations and cleanup-function execution needed by the shared login adapter. They have not been executed, and the revision itself has not been applied or PostgreSQL-verified. Before any use, verify the target and revision, take a fresh backup, review the complete repository privilege inventory, preserve owner/migrator/runtime separation, and obtain the separately required authorization. No permanent grant is authorized by this draft.
+
+## 10. Phase F.1C.4 verified restore-check state (2026-11-27)
+
+This section supersedes earlier forward-looking status in sections 7-9 for the current restore-check database. The developer and Team Leader supplied the backup and archive-readability evidence; it was not repeated during this read-only inspection. The inspection used the existing passwordless `.test.env` URL and PostgreSQL password file; no credential value was displayed.
+
+- Guarded connection matched `inventory_aios_restore_check`, `localhost:5432`, `session_user=inventory_aios_migrator`, `current_user=inventory_aios_owner`, revision `d2a8f4c1b790`. Database owner is `inventory_aios_owner`.
+- `inventory_aios_owner` is NOLOGIN. `inventory_aios_migrator` is LOGIN/NOINHERIT and has only SET (not INHERIT or ADMIN) membership in owner. `inventory_aios_app` is LOGIN, has no memberships, owns no public table/function, and has no database/schema CREATE.
+- Both individually assigned accounts are active and have credentials. `super_admin` has `inventory_administrator` and `security_administrator`; `system_admin` has `inventory_administrator`. Bootstrap operator authorization reference is recorded as `DWL 347` / `F.1C.4`. The operator and credential values are not application secrets and must not be entered into runtime logs.
+- Runtime effective baseline is database CONNECT, schema USAGE, and SELECT on `users`, `roles`, `user_roles`, and `employees`. No operational tables, auth credential/session/attempt columns, audit writes, or public application function execution are granted. No application tables/functions are owned by the runtime role.
+- The only default ACL row is the owner’s global function default allowing owner EXECUTE. There are no table default ACLs and no migrator/app default ACLs. Current application table ACLs are owner-owned; baseline runtime SELECT is explicit on the four tables above.
+- Developer/Team Leader manually verified bootstrap and ordinary audit event records. That evidence does not establish runtime audit writer privileges or inventory transaction integration tests.
+
+The current `09_operational_runtime_grants.sql` and `10_revoke_operational_runtime_grants.sql` are transactional scripts guarded to revision `d2a8f4c1b790`. `09` adds repository-required inventory reads/writes, necessary auth column privileges, append-only audit INSERT plus `id`/`occurred_at` SELECT, and validator/cleanup EXECUTE. It does not change PUBLIC ACLs, database CONNECT, schema USAGE, baseline reads, or default privileges. `10` revokes those introduced grants and verifies operational/auth/audit rights are absent while baseline reads/connectivity remain. For the Phase F.1C.5 local rehearsal, `09` and `10` both committed successfully around the focused PostgreSQL auth/inventory/workflow suites; a final runtime connection verified the baseline ACL state was restored. No migration or provisioning was repeated. An interrupted transaction rolls back; inspect live ACL state before retrying either script.
+
+Production activation remains gated by production CSRF/deployment and real-browser security evidence, runtime attempt-protection verification, runtime audit-writer verification, and inventory transaction/concurrency tests after separately approved grants. Summary activation also requires its distinct AUTH-09 through AUTH-12 field, viewer, scope and exposure approvals. Do not activate the normal application from this local rehearsal evidence alone.
 
 
 

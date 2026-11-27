@@ -25,9 +25,9 @@ const data: AssetPreviewData = {
   products,
   assets,
   lots: [
-    { id: 'lot-1', reference: 'DEMO-LOT-001', productId: 'p4', location: 'Demo North Store', physical: 20, reserved: 4 },
-    { id: 'lot-2', reference: 'DEMO-LOT-002', productId: 'p5', location: 'Demo South Store', physical: 12, reserved: 2 },
-    { id: 'lot-3', reference: 'DEMO-LOT-003', productId: 'p4', location: 'Demo South Store', physical: 8, reserved: 0 },
+    { id: 'lot-1', reference: 'DEMO-LOT-001', productId: 'p4', location: 'Demo North Store', physical: 20, reserved: 4, unit: 'each' },
+    { id: 'lot-2', reference: 'DEMO-LOT-002', productId: 'p5', location: 'Demo South Store', physical: 12, reserved: 2, unit: 'each' },
+    { id: 'lot-3', reference: 'DEMO-LOT-003', productId: 'p4', location: 'Demo South Store', physical: 8, reserved: 0, unit: 'each' },
   ],
   receipts: [
     { id: 'receipt-1', receivedDate: '2026-01-12', receivedBy: 'Demo Receiver A', quantity: 4, location: 'Demo North Store', specifications: 'Illustrative device delivery' },
@@ -37,5 +37,6 @@ const data: AssetPreviewData = {
 
 /** Local-only provider. Never falls back from a failed production request. */
 export const mockAssetProvider: AssetPreviewProvider = {
+  mode: 'fictional-mock',
   load: async () => data,
 }

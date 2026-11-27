@@ -32,7 +32,7 @@ describe('dashboard aggregation from shared providers', () => {
   it('handles zero assets and zero-quantity lots safely', () => {
     const summary = buildDashboardSummary({
       assets: [], products: [], receipts: [],
-      lots: [{ id: 'lot', reference: 'DEMO-ZERO', productId: 'missing', location: 'Demo Store', physical: 0, reserved: 0 }],
+      lots: [{ id: 'lot', reference: 'DEMO-ZERO', productId: 'missing', location: 'Demo Store', physical: 0, reserved: 0, unit: 'each' }],
     }, { total: 0, active: 0, inactive: 0, departments: 0 })
     expect(summary.lifecycle.every((item) => item.count === 0)).toBe(true)
     expect(summary.categories).toEqual([])

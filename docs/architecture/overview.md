@@ -9,9 +9,9 @@ Inventory AIOS is an independent system. It does not share an operational databa
 ## Proposed logical architecture
 
 ```text
-Authorized browser (desktop / tablet / mobile)
+Authorized browser (initially two individually assigned administrators)
         |
-        | HTTPS, session or token, responsive React UI
+        | HTTPS, secure application session, responsive React UI
         v
 React + TypeScript + Vite frontend
         |
@@ -23,6 +23,10 @@ FastAPI application
   - lifecycle services and approval policy
   - audit/event recording
   - notification orchestration
+        |
+        +<------------------ Management AIOS backend (future, approved)
+        |                     Management user authorization first;
+        |                     summary-only service identity to this API
         |
         +---------------------> Grok API (server-side, scoped prompts only)
         |
@@ -65,7 +69,13 @@ PostgreSQL is the authoritative operational database. It stores current state an
 
 ### Grok API
 
-Grok is an optional server-side assistant integration through FastAPI. It must never receive direct database credentials or direct PostgreSQL access. A proposed safe pattern is to expose only explicitly selected, permission-filtered context from FastAPI and to treat generated text as advisory. Any write suggested by Grok must be reviewed and executed through ordinary authorized API workflows. Prompt/data-retention policy and enabled use cases require management decisions.
+Grok is an optional future server-side assistant integration through FastAPI. It must never receive administrator passwords, session credentials, service credentials, or direct PostgreSQL access. Backend services must apply the authenticated administrator's own Inventory AIOS permissions and business/approval rules to every AI-assisted operation. Generated text is advisory; sensitive changes require the approved human confirmation and ordinary authorized API workflow, and are attributed to the responsible local user. Read-only AI requests may use only approved summary schemas. Prompt/data-retention policy and enabled use cases require management decisions.
+
+### Future Management AIOS integration
+
+Inventory AIOS remains an independent application, repository, deployment, backend, and database. The future Management AIOS navigation presents two distinct paths: **Inventory Summary** and **Open Inventory Administration**. Summary access requires Management AIOS authentication plus an explicit Management-side summary authorization, followed by a server-to-server call from the Management backend to dedicated Inventory summary endpoints using a narrowly scoped, rotatable/revocable integration identity. That identity cannot access Inventory administrator operations. Apply timeouts, rate limits, bounded caching, data freshness metadata, and a clear unavailable state. Never expose service credentials to the browser, forward Management bearer tokens as Inventory credentials, or permit the Management backend to act as an unrestricted proxy.
+
+Open Inventory Administration is a link to the independent Inventory deployment. The administrator authenticates with their own individual Inventory AIOS credentials. A Management AIOS login or administrator status does not create an Inventory account or grant Inventory permissions. No direct Management AIOS database access is allowed. The existing Management AIOS DigitDisplay link uses a separate application login and is navigation only; it is not a reusable SSO mechanism. Management AIOS is not modified by this design. Optional company OIDC may later provide SSO, but each application keeps its own client, local session, explicit access grant, and authorization policy.
 
 ### Document storage
 
@@ -78,6 +88,8 @@ Notifications are created by domain events such as pending registration, pending
 ## Security and data-flow rules
 
 - Require authentication for authorized-device access and enforce role permissions in FastAPI.
+- Initial local authentication is a proposed direction only: two individually assigned administrator accounts, private password provisioning, and backend-managed opaque sessions. MFA, password, and session rules require company approval; no operational login is enabled.
+- Other users receive only company-approved aggregate summaries through dedicated schemas/endpoints and explicit authorization. No public or anonymous summary access is permitted.
 - Scope every read and write by the authenticated user’s role and permitted organizational context once that policy is decided.
 - Validate all input at the API and service layers; use database constraints as a second line of defense.
 - Use least-privilege credentials for the application and separate credentials for migrations/operations.
@@ -92,7 +104,8 @@ The following route shapes are proposed and require schema/permission review bef
 
 | Module | Representative endpoints |
 |---|---|
-| Auth and users | `POST /auth/login`, `POST /auth/refresh`, `GET /me`, `GET /users`, `PATCH /users/{id}/roles` |
+| Auth and users (proposed) | `POST /auth/login`, `POST /auth/logout`, `GET /auth/session`, `POST /auth/password/change`, `GET /me`; restricted administrative provisioning/reset operations are not public |
+| Read-only summary (proposed) | `GET /summary` and approved aggregate breakdowns with dedicated response schemas; never expose unrestricted operational models |
 | Dashboard | `GET /dashboard/summary`, `GET /dashboard/trends` |
 | Catalog and assets | `GET /assets`, `POST /assets`, `GET /assets/{id}`, `PATCH /assets/{id}`, `GET /assets/{id}/history` |
 | Receiving | `POST /receipts`, `GET /receipts`, `GET /receipts/{id}`, `POST /receipts/{id}/documents`, `POST /receipts/{id}/submit` |

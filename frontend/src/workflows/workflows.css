@@ -41,6 +41,8 @@
 .workflow-details dd { margin: 4px 0 0; font-size: 12px; font-weight: 650; }
 .workflow-form { display: grid; gap: 13px; }
 .workflow-form button:disabled { cursor: not-allowed; opacity: .55; }
+.workflow-list-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--line); color: var(--ink); font-size: 13px; }
+.workflow-list-item strong { max-width: 35%; overflow-wrap: anywhere; }
 .workflow-preview-link { display: inline-block; margin-bottom: 13px; color: var(--accent); font-size: 12px; font-weight: 700; }
 .workflow-preview-link:focus-visible { outline: 3px solid rgba(45,108,223,.5); outline-offset: 2px; }
 @media (max-width: 980px) { .workflow-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.workflow-filters { grid-template-columns: repeat(2, minmax(0,1fr)); } }

@@ -208,6 +208,11 @@ def test_writer_flushes_in_callers_transaction_and_returns_server_timestamp(
     assert row.actor_user_id == actor.id
     assert row.occurred_at is not None and row.occurred_at.tzinfo is not None
     assert row.event_metadata["outcome"] == "success"
+    assert owner_session.execute(
+        text("SELECT previous_values IS NULL, updated_values IS NULL "
+             "FROM public.audit_events WHERE id=:id"),
+        {"id": row.id},
+    ).one() == (True, True)
     assert len(statements) == 1
     assert "RETURNING PUBLIC.AUDIT_EVENTS.OCCURRED_AT" in re.sub(
         r"\s+", " ", statements[0]

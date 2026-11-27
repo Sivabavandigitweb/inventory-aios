@@ -17,7 +17,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -230,6 +230,12 @@ class AuditEvent(Base):
         "metadata", JSONB().with_variant(JSON(), "sqlite"), nullable=False,
         server_default=text("'{}'"),
     )
+    previous_values: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True).with_variant(JSON(none_as_null=True), "sqlite")
+    )
+    updated_values: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB(none_as_null=True).with_variant(JSON(none_as_null=True), "sqlite")
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -246,11 +252,52 @@ class AuditEvent(Base):
             "public.inventory_aios_audit_metadata_is_valid(metadata)",
             name="ck_audit_events_metadata_valid",
         ),
+        CheckConstraint("previous_values IS NULL OR public.inventory_aios_audit_values_are_valid(previous_values)",
+                        name="ck_audit_events_previous_values_object"),
+        CheckConstraint("updated_values IS NULL OR public.inventory_aios_audit_values_are_valid(updated_values)",
+                        name="ck_audit_events_updated_values_object"),
         Index("ix_audit_events_actor_occurred", "actor_user_id", "occurred_at"),
         Index("ix_audit_events_entity_occurred", "entity_type", "entity_id", "occurred_at"),
         {"schema": "public"},
     )
 
+
+class AdministratorBootstrapEvent(Base):
+    """Dedicated operator-attributed, append-only administrator lifecycle audit."""
+
+    __tablename__ = "administrator_bootstrap_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
+    )
+    operator_identifier: Mapped[str] = mapped_column(String(120), nullable=False)
+    authorization_reference: Mapped[str] = mapped_column(String(160), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_username: Mapped[str] = mapped_column(String(100), nullable=False)
+    assigned_role_codes: Mapped[list[str]] = mapped_column(
+        ARRAY(String(100)), nullable=False, server_default=text("'{}'::varchar[]")
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("length(trim(operator_identifier)) BETWEEN 1 AND 120", name="ck_admin_bootstrap_operator"),
+        CheckConstraint("length(trim(authorization_reference)) BETWEEN 1 AND 160", name="ck_admin_bootstrap_authorization"),
+        CheckConstraint("action IN ('bootstrap', 'provision', 'deactivate', 'credential_reset')", name="ck_admin_bootstrap_action"),
+        CheckConstraint("length(trim(target_username)) BETWEEN 1 AND 100", name="ck_admin_bootstrap_username"),
+        CheckConstraint(
+            "assigned_role_codes <@ ARRAY['inventory_administrator', 'security_administrator']::varchar[]",
+            name="ck_admin_bootstrap_role_codes",
+        ),
+        Index("uq_administrator_bootstrap_once", "action", unique=True,
+              postgresql_where=text("action = 'bootstrap'")),
+        Index("ix_admin_bootstrap_target_occurred", "target_user_id", "occurred_at"),
+        {"schema": "public"},
+    )
 
 class AssetCategory(TimestampMixin, Base):
     __tablename__ = "asset_categories"

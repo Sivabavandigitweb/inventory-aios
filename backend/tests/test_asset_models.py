@@ -7,7 +7,23 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateIndex, CreateTable
 
-from app.models import AssetCategory, Base, InventoryProduct, Location, Receipt, User
+from app.models import (
+    AssetCategory,
+    AssetRegistrationEvent,
+    Base,
+    EmployeeSourceIdentity,
+    EmployeeSyncRun,
+    InventoryBalance,
+    InventoryMovement,
+    InventoryProduct,
+    Location,
+    QuantityInventoryLot,
+    Receipt,
+    ReceiptLine,
+    Supplier,
+    TrackedAsset,
+    User,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -39,28 +55,30 @@ def test_model_registered_with_public_schema_and_uuid_defaults(model):
     assert table.c.updated_at.onupdate is not None
 
 
-@pytest.mark.parametrize(("model", "column_name", "target"), [
-    (InventoryProduct, "category_id", AssetCategory),
-    (Receipt, "received_by_id", User),
-    (Receipt, "location_id", Location),
+@pytest.mark.parametrize(("model", "column_name", "target", "nullable"), [
+    (InventoryProduct, "category_id", AssetCategory, False),
+    (Receipt, "received_by_id", User, False),
+    (Receipt, "location_id", Location, False),
+    (Receipt, "supplier_id", Supplier, True),
 ])
-def test_foreign_keys_reuse_existing_master_tables_with_restrict(model, column_name, target):
+def test_foreign_keys_reuse_existing_master_tables_with_restrict(model, column_name, target, nullable):
     column = model.__table__.c[column_name]
     foreign_key, = column.foreign_keys
     assert foreign_key.column is target.__table__.c.id
     assert foreign_key.ondelete == "RESTRICT"
-    assert not column.nullable
+    assert column.nullable is nullable
     assert foreign_key.constraint.name == (
         f"fk_{model.__tablename__}_{column_name}_{target.__tablename__}"
     )
-    assert any(list(index.columns)[0] is column for index in model.__table__.indexes)
+    if not nullable:
+        assert any(list(index.columns)[0] is column for index in model.__table__.indexes)
 
 
-def test_catalog_contract_does_not_decide_units_or_sku_uniqueness():
+def test_catalog_contract_preserves_explicit_units_and_exact_sku_uniqueness():
     table = InventoryProduct.__table__
     assert set(table.c.keys()) == {
         "id", "category_id", "sku", "name", "brand", "model", "specifications",
-        "active", "created_at", "updated_at",
+        "active", "idempotency_request_id", "created_at", "updated_at",
     }
     assert table.c.name.type.length == 200 and not table.c.name.nullable
     assert table.c.sku.type.length == 80 and table.c.sku.nullable
@@ -69,8 +87,11 @@ def test_catalog_contract_does_not_decide_units_or_sku_uniqueness():
     assert not table.c.specifications.nullable
     assert str(table.c.specifications.server_default.arg) == "'{}'::jsonb"
     assert str(table.c.active.server_default.arg) == "true"
-    assert not any(isinstance(c, UniqueConstraint) for c in table.constraints)
-    assert not any(index.unique for index in table.indexes)
+    assert table.c.idempotency_request_id.nullable
+    assert {c.name for c in table.constraints if isinstance(c, UniqueConstraint)} == {
+        "uq_inventory_products_idempotency_request_id",
+    }
+    assert {index.name for index in table.indexes if index.unique} == {"uq_inventory_products_sku"}
     checks = {c.name: str(c.sqltext) for c in table.constraints if isinstance(c, CheckConstraint)}
     assert checks == {
         "ck_inventory_products_name_nonempty": "length(trim(name)) > 0",
@@ -82,13 +103,16 @@ def test_catalog_contract_does_not_decide_units_or_sku_uniqueness():
 def test_receipt_records_explicit_arrival_without_approval_or_number_defaults():
     table = Receipt.__table__
     assert set(table.c.keys()) == {
-        "id", "received_at", "received_by_id", "location_id", "external_reference",
-        "notes", "created_at", "updated_at",
+        "id", "received_at", "received_by_id", "location_id", "supplier_id", "external_reference",
+        "notes", "idempotency_request_id", "created_at", "updated_at",
     }
     assert table.c.received_at.type.timezone and not table.c.received_at.nullable
     assert table.c.received_at.default is None and table.c.received_at.server_default is None
     assert table.c.external_reference.nullable and table.c.notes.nullable
-    assert not any(isinstance(c, UniqueConstraint) for c in table.constraints)
+    assert table.c.idempotency_request_id.nullable
+    assert {c.name for c in table.constraints if isinstance(c, UniqueConstraint)} == {
+        "uq_receipts_idempotency_request_id",
+    }
     checks = {c.name: str(c.sqltext) for c in table.constraints if isinstance(c, CheckConstraint)}
     assert checks == {"ck_receipts_external_reference_nonempty":
                       "external_reference IS NULL OR length(trim(external_reference)) > 0"}
@@ -146,7 +170,25 @@ def test_postgresql_ddl_and_indexes_compile_without_connections(model):
 def test_all_existing_and_new_metadata_compile_together():
     for table in Base.metadata.sorted_tables:
         assert str(CreateTable(table).compile(dialect=postgresql.dialect()))
-    for name in ("assets", "receipt_lines", "inventory_lots", "inventory_balances",
-                 "inventory_movements", "asset_registration_events"):
-        assert name not in Base.metadata.tables
-        assert f"public.{name}" not in Base.metadata.tables
+    for name in ("receipt_lines", "quantity_inventory_lots", "inventory_balances",
+                 "inventory_movements", "asset_registration_events", "tracked_assets",
+                 "employee_source_identities", "employee_sync_runs"):
+        assert f"public.{name}" in Base.metadata.tables
+    assert Base.metadata.tables["public.receipts"].c.supplier_id.nullable
+
+
+def test_quantity_balances_and_tracked_assets_have_separate_nonnegative_contracts():
+    balance = InventoryBalance.__table__
+    checks = {c.name: str(c.sqltext) for c in balance.constraints if isinstance(c, CheckConstraint)}
+    assert checks["ck_inventory_balances_on_hand_nonnegative"] == "on_hand >= 0"
+    assert checks["ck_inventory_balances_reserved_valid"] == "reserved >= 0 AND quarantined >= 0 AND reserved + quarantined <= on_hand"
+    assert set(balance.primary_key.columns.keys()) == {"product_id", "location_id", "unit"}
+    assert "lifecycle_status" in TrackedAsset.__table__.c
+    assert not TrackedAsset.__table__.c.asset_number.unique
+    assert any(i.name == "uq_tracked_assets_asset_number" and i.unique for i in TrackedAsset.__table__.indexes)
+    assert ReceiptLine.__table__.c.status.server_default is not None
+    assert QuantityInventoryLot.__table__.c.unit is not None
+    assert InventoryMovement.__table__.c.idempotency_request_id.unique
+    assert AssetRegistrationEvent.__table__.c.details is not None
+    assert EmployeeSourceIdentity.__table__.c.external_id.primary_key
+    assert EmployeeSyncRun.__table__.c.finished_at.nullable

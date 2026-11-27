@@ -31,7 +31,7 @@ export type EmployeeSummary = { total: number; active: number; inactive: number;
 export type OrganizationOption = { id: string; name: string; department_id?: string }
 
 export type EmployeeDirectoryProvider = {
-  mode: 'fictional-mock'
+  mode: 'fictional-mock' | 'authenticated-api'
   listEmployees(filters: EmployeeFilters): Promise<EmployeePageResult>
   getSummary(): Promise<EmployeeSummary>
   statuses: readonly { value: string; label: string }[]

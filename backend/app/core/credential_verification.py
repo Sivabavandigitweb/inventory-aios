@@ -91,6 +91,19 @@ class UsernameCanonicalizer(Protocol):
     def __call__(self, username: str) -> str: ...
 
 
+def canonicalize_ascii_username(username: str) -> str:
+    """Apply the confirmed lowercase-ASCII login contract without trimming.
+
+    PostgreSQL ``lower(username)`` and this operation agree for ASCII input;
+    non-ASCII identifiers are rejected instead of being Unicode-folded.
+    """
+    if not isinstance(username, str) or not username or not username.isascii():
+        raise ValueError("Username must be non-empty ASCII text.")
+    if username != username.strip():
+        raise ValueError("Username cannot contain surrounding whitespace.")
+    return username.lower()
+
+
 class UserIdentityRepository(Protocol):
     """Return all matches so ambiguous identity resolution can fail closed."""
 

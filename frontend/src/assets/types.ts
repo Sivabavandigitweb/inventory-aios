@@ -26,12 +26,13 @@ export type PreviewLot = {
   location: string
   physical: number
   reserved: number
+  unit: string
 }
 export type PreviewReceipt = {
   id: string
   receivedDate: string
   receivedBy: string
-  quantity: number
+  quantity: number | null
   location: string
   specifications: string
 }
@@ -41,4 +42,4 @@ export type AssetPreviewData = {
   lots: PreviewLot[]
   receipts: PreviewReceipt[]
 }
-export type AssetPreviewProvider = { load(): Promise<AssetPreviewData> }
+export type AssetPreviewProvider = { mode?: 'fictional-mock' | 'authenticated-api'; load(): Promise<AssetPreviewData> }

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -37,6 +37,11 @@ class EmployeePage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class EmployeeSyncStatus(BaseModel):
+    configured: bool
+    last_success_at: datetime | None
 
 
 class EmployeeFilters(BaseModel):

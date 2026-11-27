@@ -74,7 +74,7 @@ def test_actual_runtime_writer_with_administrator_rollback():
                     "SELECT current_database(),session_user,current_user,inet_server_port()"
                 )).one() == ("inventory_aios_restore_check", "postgres", "postgres", 5432)
                 assert conn.execute(text("SELECT version_num FROM public.alembic_version" )
-                                    ).scalar_one() == "7d4a9c2e1b60"
+                                    ).scalar_one() == "b2d4f6a8c013"
                 assert conn.execute(text("SELECT pg_get_userbyid(datdba) FROM pg_database "
                                          "WHERE datname=current_database()")
                                     ).scalar_one() == "inventory_aios_owner"
@@ -123,6 +123,8 @@ def test_actual_runtime_writer_with_administrator_rollback():
                             actor_user_id=actor, action="employee.update", entity_type="employee",
                             entity_id=uuid.uuid4(), metadata={"request_id": str(uuid.uuid4()),
                             "changed_fields": ["department_id"], "outcome": "success"},
+                            previous_values={"lifecycle_status": "available"},
+                            updated_values={"lifecycle_status": "allocated"},
                         ))
                         assert isinstance(row.id, uuid.UUID)
                         assert row.occurred_at is not None and row.occurred_at.tzinfo is not None

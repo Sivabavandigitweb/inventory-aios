@@ -1,7 +1,19 @@
-from app.models.assets import InventoryProduct, Receipt
-from app.models.authentication import AuthSession, UserPasswordCredential
+from app.models.assets import (
+    AssetRegistrationEvent,
+    EmployeeSourceIdentity,
+    EmployeeSyncRun,
+    InventoryBalance,
+    InventoryMovement,
+    InventoryProduct,
+    QuantityInventoryLot,
+    Receipt,
+    ReceiptLine,
+    TrackedAsset,
+)
+from app.models.authentication import AuthLoginAttemptBucket, AuthSession, UserPasswordCredential
 from app.models.base import Base
 from app.models.core import (
+    AdministratorBootstrapEvent,
     AssetCategory,
     AuditEvent,
     Department,
@@ -16,24 +28,58 @@ from app.models.core import (
     UserRole,
 )
 from app.models.idempotency import IdempotencyRequest
+from app.models.workflows import (
+    Allocation,
+    AllocationLine,
+    AssetRegistrationRequest,
+    AssetRepair,
+    DisposalRequest,
+    EmployeeExitClearance,
+    InventoryNotification,
+    InventoryReturn,
+    QuantityDispositionRequest,
+    QuantityRegistrationRequest,
+    WorkflowApproval,
+)
 
 __all__ = [
+    "AdministratorBootstrapEvent",
     "AuditEvent",
     "AssetCategory",
+    "AssetRegistrationEvent",
+    "AssetRegistrationRequest",
+    "Allocation",
+    "AllocationLine",
+    "AssetRepair",
     "AuthSession",
+    "AuthLoginAttemptBucket",
     "Base",
     "Department",
     "Designation",
     "Employee",
     "EmployeeHistory",
+    "EmployeeExitClearance",
+    "EmployeeSourceIdentity",
+    "EmployeeSyncRun",
+    "InventoryBalance",
+    "InventoryMovement",
+    "InventoryNotification",
+    "InventoryReturn",
     "InventoryProduct",
     "IdempotencyRequest",
     "Location",
     "Receipt",
+    "ReceiptLine",
+    "QuantityInventoryLot",
+    "QuantityRegistrationRequest",
+    "QuantityDispositionRequest",
     "Role",
     "Supplier",
     "Team",
+    "TrackedAsset",
     "User",
     "UserPasswordCredential",
     "UserRole",
+    "WorkflowApproval",
+    "DisposalRequest",
 ]

@@ -11,6 +11,8 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     LargeBinary,
+    SmallInteger,
+    String,
     Text,
     UniqueConstraint,
     func,
@@ -107,3 +109,30 @@ class AuthSession(Base):
 
     def __repr__(self) -> str:
         return f"<AuthSession id={self.id!r} user_id={self.user_id!r}>"
+
+
+class AuthLoginAttemptBucket(Base):
+    """Hashed account/source counters for shared login protection."""
+
+    __tablename__ = "auth_login_attempt_buckets"
+
+    scope: Mapped[str] = mapped_column(String(16), primary_key=True)
+    key_digest: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    failures: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("0"))
+    in_flight: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default=text("0"))
+    blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("scope IN ('account', 'source')", name="ck_auth_login_attempt_scope"),
+        CheckConstraint("octet_length(key_digest) = 32", name="ck_auth_login_attempt_digest_length"),
+        CheckConstraint("failures >= 0 AND in_flight >= 0", name="ck_auth_login_attempt_counts_nonnegative"),
+        Index("ix_auth_login_attempt_updated_at", "updated_at"),
+        {"schema": "public"},
+    )
+
+    def __repr__(self) -> str:
+        return f"<AuthLoginAttemptBucket scope={self.scope!r} redacted>"

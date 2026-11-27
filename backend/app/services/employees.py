@@ -6,8 +6,23 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.models import AuditEvent, Department, Designation, Employee, EmployeeHistory, Team, User
-from app.schemas.employees import EmployeeCreate, EmployeeFilters, EmployeePage, EmployeeRead
+from app.models import (
+    AuditEvent,
+    Department,
+    Designation,
+    Employee,
+    EmployeeHistory,
+    EmployeeSyncRun,
+    Team,
+    User,
+)
+from app.schemas.employees import (
+    EmployeeCreate,
+    EmployeeFilters,
+    EmployeePage,
+    EmployeeRead,
+    EmployeeSyncStatus,
+)
 from app.services.audit import AuditEventInput
 
 AuditWriter = Callable[[Session, AuditEventInput], AuditEvent]
@@ -105,3 +120,27 @@ def list_employees(session: Session, filters: EmployeeFilters) -> EmployeePage:
     except SQLAlchemyError:
         session.rollback()
         raise AppError("DATABASE_UNAVAILABLE", "Employee search is unavailable.", 503) from None
+
+
+def employee_directory_summary(session: Session) -> dict[str, int]:
+    """Operational aggregate for principals already authorized to read all employees."""
+    try:
+        total = session.scalar(select(func.count(Employee.id))) or 0
+        active = session.scalar(select(func.count(Employee.id)).where(Employee.status == "active")) or 0
+        inactive = session.scalar(select(func.count(Employee.id)).where(Employee.status == "inactive")) or 0
+        departments = session.scalar(select(func.count(func.distinct(Employee.department_id)))) or 0
+        return {"total": total, "active": active, "inactive": inactive, "departments": departments}
+    except SQLAlchemyError:
+        session.rollback()
+        raise AppError("DATABASE_UNAVAILABLE", "Employee summary is unavailable.", 503) from None
+
+
+def employee_sync_status(session: Session) -> EmployeeSyncStatus:
+    """Return only migration-backed sync availability; no source connection is attempted."""
+    try:
+        last_success = session.scalar(select(EmployeeSyncRun.finished_at).where(
+            EmployeeSyncRun.status == "succeeded").order_by(EmployeeSyncRun.finished_at.desc()).limit(1))
+        return EmployeeSyncStatus(configured=False, last_success_at=last_success)
+    except SQLAlchemyError:
+        session.rollback()
+        raise AppError("DATABASE_UNAVAILABLE", "Employee synchronization status is unavailable.", 503) from None

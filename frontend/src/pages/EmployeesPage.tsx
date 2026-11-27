@@ -60,14 +60,16 @@ export function EmployeesPage({ provider = mockEmployeeProvider }: Props) {
       <PageHeader
         eyebrow="People"
         title="Employees"
-        description="Find employee profiles and their current organization. Employee records will come from an approved authoritative source in a future release."
+        description={provider.mode === 'fictional-mock'
+          ? 'Find fictional employee profiles in a local preview.'
+          : 'Search employee records from the protected Inventory AIOS API.'}
       />
-      <div className="employee-mock-banner" role="status">
-        <strong>Fictional preview data</strong>
-        <span> This directory is a local mock. It makes no backend requests and contains no real employee records.</span>
-      </div>
+      {provider.mode === 'fictional-mock' ? <div className="employee-mock-banner" role="status">
+        <strong>Fictional preview data</strong><span> This directory is a local mock. It makes no backend requests and contains no real employee records.</span>
+      </div> : <div className="employee-mock-banner" role="status"><strong>Protected operational API</strong>
+        <span> Requests use the authenticated same-origin API. Failed requests do not fall back to preview data.</span></div>}
       <section className="employee-sync" aria-labelledby="employee-sync-title">
-        <div><p className="eyebrow">Source connection</p><h2 id="employee-sync-title">Employee synchronization</h2><p className="employee-sync-description">The authoritative employee source is not yet connected.</p></div>
+        <div><p className="eyebrow">Source connection</p><h2 id="employee-sync-title">Employee synchronization</h2><p className="employee-sync-description">{provider.mode === 'fictional-mock' ? 'The authoritative employee source is not yet connected.' : 'Synchronization is unavailable until the source owner confirms the source schema and identity mapping.'}</p></div>
         <dl className="employee-sync-status"><div><dt>Connection</dt><dd>Not connected</dd></div><div><dt>Last successful sync</dt><dd>Not available</dd></div><div><dt>Availability</dt><dd>Unavailable</dd></div></dl>
         <button className="button employee-secondary" type="button" disabled aria-describedby="employee-sync-title">Sync Employees (unavailable)</button>
       </section>
@@ -80,7 +82,7 @@ export function EmployeesPage({ provider = mockEmployeeProvider }: Props) {
       <section className="employee-directory" aria-labelledby="employee-directory-title">
         <div className="employee-directory-heading">
           <div><p className="eyebrow">Directory</p><h2 id="employee-directory-title">Employee directory</h2></div>
-          <span className="employee-mock-tag">Mock data</span>
+          <span className="employee-mock-tag">{provider.mode === 'fictional-mock' ? 'Mock data' : 'Protected API'}</span>
         </div>
         <div className="employee-filters">
           <div className="employee-filter-search">

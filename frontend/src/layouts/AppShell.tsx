@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { navigationItems } from '../components/navigation'
 
-export function AppShell() {
+export function AppShell({ authenticatedUserId, onLogout, basePath = '' }: { authenticatedUserId?: string; onLogout?: () => Promise<boolean>; basePath?: string } = {}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const location = useLocation()
-  const currentPage = navigationItems.find((item) => location.pathname === item.to)
+  const currentPage = navigationItems.find((item) => location.pathname === `${basePath}${item.to}`)
 
   return (
     <div className="app-shell">
@@ -27,7 +27,7 @@ export function AppShell() {
           {navigationItems.slice(0, 6).map((item) => (
             <NavLink
               key={item.to}
-              to={item.to}
+              to={`${basePath}${item.to}`}
               end
               className={({ isActive }) => `nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => setIsSidebarOpen(false)}
@@ -40,7 +40,7 @@ export function AppShell() {
           {navigationItems.slice(6).map((item) => (
             <NavLink
               key={item.to}
-              to={item.to}
+              to={`${basePath}${item.to}`}
               end
               className={({ isActive }) => `nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => setIsSidebarOpen(false)}
@@ -52,7 +52,7 @@ export function AppShell() {
         </nav>
         <div className="sidebar-footer">
           <span className="status-dot preview-dot" aria-hidden="true" />
-          <span>Preview mode</span>
+          <span>{authenticatedUserId ? 'Authenticated session' : 'Preview mode'}</span>
         </div>
       </aside>
 
@@ -71,10 +71,14 @@ export function AppShell() {
               <span aria-hidden="true">&#9825;</span>
 
             </button>
-            <div className="user-menu" aria-label="Preview session">
+            {authenticatedUserId && onLogout ? <div className="user-menu" aria-label="Authenticated session">
+              <span className="avatar" aria-hidden="true">IA</span>
+              <span className="user-copy"><strong>Inventory AIOS user</strong><small>Authenticated session</small></span>
+              <button className="shell-logout" type="button" onClick={() => void onLogout()}>Sign out</button>
+            </div> : <div className="user-menu" aria-label="Preview session">
               <span className="avatar" aria-hidden="true">PV</span>
               <span className="user-copy"><strong>Preview session</strong><small>Authentication not connected</small></span>
-            </div>
+            </div>}
           </div>
         </header>
         <main id="main-content" className="main-content">

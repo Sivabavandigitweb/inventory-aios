@@ -1,0 +1,19 @@
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 28px 18px; background: radial-gradient(circle at 15% 15%, #e8efff 0, transparent 35%), #f4f6fa; color: #182230; }
+.auth-card { width: min(100%, 420px); padding: 36px; border: 1px solid #e0e6ef; border-radius: 16px; background: #fff; box-shadow: 0 18px 55px rgba(26, 42, 70, .1); }
+.auth-brand { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 26px; border-radius: 12px; background: #2d6cdf; color: #fff; font-weight: 800; text-decoration: none; }
+.auth-eyebrow { margin-bottom: 8px; color: #496da9; font-size: 11px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.auth-card h1 { margin-bottom: 8px; font-size: 29px; }
+.auth-description, .auth-note { color: #657286; font-size: 13px; line-height: 1.6; }
+.auth-card form { display: grid; gap: 9px; margin-top: 25px; }
+.auth-card label { margin-top: 8px; color: #354255; font-size: 12px; font-weight: 700; }
+.auth-card input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid #cfd8e5; border-radius: 8px; color: #182230; background: white; font: inherit; }
+.auth-card input:focus-visible, .password-toggle:focus-visible, .auth-submit:focus-visible { outline: 3px solid rgba(45,108,223,.25); outline-offset: 2px; }
+.password-field { position: relative; }
+.password-field input { padding-right: 64px; }
+.password-toggle { position: absolute; top: 50%; right: 9px; transform: translateY(-50%); border: 0; background: transparent; color: #315fa8; font-size: 12px; font-weight: 700; cursor: pointer; }
+.auth-submit { min-height: 44px; margin-top: 13px; border: 0; border-radius: 8px; background: #2d6cdf; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+.auth-submit:disabled { background: #9eacc3; cursor: not-allowed; }
+.auth-alert { padding: 11px 12px; border: 1px solid #f0c5c2; border-radius: 8px; background: #fff5f4; color: #8b3029; font-size: 12px; line-height: 1.5; }
+.auth-note { margin: 20px 0 12px; font-size: 11px; }
+.preview-link { display: inline-block; color: #315fa8; font-size: 12px; font-weight: 700; }
+@media (max-width: 480px) { .auth-card { padding: 27px 22px; } }

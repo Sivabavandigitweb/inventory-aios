@@ -14,7 +14,7 @@ BEGIN
         RAISE EXCEPTION 'Connect as inventory_aios_migrator and assume inventory_aios_owner';
     END IF;
     SELECT version_num INTO applied_revision FROM public.alembic_version;
-    IF applied_revision IS DISTINCT FROM '7d4a9c2e1b60' THEN
+    IF applied_revision IS DISTINCT FROM 'b2d4f6a8c013' THEN
         RAISE EXCEPTION 'Unexpected Alembic revision';
     END IF;
     IF NOT EXISTS (
@@ -52,19 +52,23 @@ REVOKE ALL PRIVILEGES ON FUNCTION
 REVOKE ALL PRIVILEGES ON FUNCTION
     public.inventory_aios_prevent_audit_event_mutation() FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON FUNCTION
+    public.inventory_aios_audit_values_are_valid(jsonb) FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION
     public.inventory_aios_audit_metadata_is_valid(jsonb) FROM inventory_aios_app;
 REVOKE ALL PRIVILEGES ON FUNCTION
     public.inventory_aios_prevent_audit_event_mutation() FROM inventory_aios_app;
+REVOKE ALL PRIVILEGES ON FUNCTION
+    public.inventory_aios_audit_values_are_valid(jsonb) FROM inventory_aios_app;
 
 -- Clear stale table/column grants, then grant only the tested ORM privileges.
 REVOKE ALL PRIVILEGES ON TABLE public.audit_events FROM inventory_aios_app;
-REVOKE SELECT (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata)
+REVOKE SELECT (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata, previous_values, updated_values)
 ON TABLE public.audit_events FROM inventory_aios_app, PUBLIC;
-REVOKE INSERT (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata)
+REVOKE INSERT (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata, previous_values, updated_values)
 ON TABLE public.audit_events FROM inventory_aios_app, PUBLIC;
-REVOKE UPDATE (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata)
+REVOKE UPDATE (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata, previous_values, updated_values)
 ON TABLE public.audit_events FROM inventory_aios_app, PUBLIC;
-REVOKE REFERENCES (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata)
+REVOKE REFERENCES (id, actor_user_id, action, entity_type, entity_id, occurred_at, change_source, metadata, previous_values, updated_values)
 ON TABLE public.audit_events FROM inventory_aios_app, PUBLIC;
 REVOKE ALL PRIVILEGES ON TABLE public.audit_events FROM PUBLIC;
 GRANT INSERT (
@@ -74,20 +78,24 @@ GRANT INSERT (
     entity_type,
     entity_id,
     change_source,
-    metadata
+    metadata,
+    previous_values,
+    updated_values
 )
 ON TABLE public.audit_events
 TO inventory_aios_app;
 GRANT SELECT (occurred_at) ON TABLE public.audit_events TO inventory_aios_app;
 GRANT EXECUTE ON FUNCTION
     public.inventory_aios_audit_metadata_is_valid(jsonb) TO inventory_aios_app;
+GRANT EXECUTE ON FUNCTION
+    public.inventory_aios_audit_values_are_valid(jsonb) TO inventory_aios_app;
 
 DO $verify$
 BEGIN
     IF current_database() <> 'inventory_aios_restore_check'
        OR session_user <> 'inventory_aios_migrator'
        OR current_user <> 'inventory_aios_owner'
-       OR (SELECT version_num FROM public.alembic_version) <> '7d4a9c2e1b60' THEN
+       OR (SELECT version_num FROM public.alembic_version) <> 'b2d4f6a8c013' THEN
         RAISE EXCEPTION 'Database identity or revision changed during grant review';
     END IF;
     IF has_table_privilege('inventory_aios_app','public.audit_events','INSERT')
@@ -106,6 +114,10 @@ BEGIN
            'inventory_aios_app',
            'public.inventory_aios_audit_metadata_is_valid(jsonb)',
            'EXECUTE'
+       ) OR NOT has_function_privilege(
+           'inventory_aios_app',
+           'public.inventory_aios_audit_values_are_valid(jsonb)',
+           'EXECUTE'
        ) THEN
         RAISE EXCEPTION 'Runtime audit privileges do not match least-privilege plan';
     END IF;
@@ -118,7 +130,7 @@ BEGIN
               has_column_privilege('inventory_aios_app', a.attrelid, a.attnum, 'INSERT')
                   IS DISTINCT FROM (a.attname = ANY (ARRAY[
                       'id','actor_user_id','action','entity_type',
-                      'entity_id','change_source','metadata'
+                      'entity_id','change_source','metadata','previous_values','updated_values'
                   ]))
               OR has_column_privilege('inventory_aios_app', a.attrelid, a.attnum, 'SELECT')
                   IS DISTINCT FROM (a.attname='occurred_at')
@@ -172,7 +184,8 @@ BEGIN
         ) acl
         WHERE p.oid IN (
             'public.inventory_aios_audit_metadata_is_valid(jsonb)'::regprocedure,
-            'public.inventory_aios_prevent_audit_event_mutation()'::regprocedure
+            'public.inventory_aios_prevent_audit_event_mutation()'::regprocedure,
+            'public.inventory_aios_audit_values_are_valid(jsonb)'::regprocedure
         )
           AND acl.grantee=0 AND acl.privilege_type='EXECUTE'
     ) THEN

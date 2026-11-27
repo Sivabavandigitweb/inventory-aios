@@ -49,6 +49,12 @@ The project direction is to receive employee master data from the company's auth
 | R-14/R-15 | Search and reporting continue to use linked local employee identity and authorized organization data. | Confirm freshness and report as-of semantics. |
 | R-16 | The PDF asks for mobile employee updates; source-owned fields may need a hand-off to the authoritative system instead of local edits. | Management must confirm whether that path satisfies R-16 and whether any local-only employee fields remain editable. |
 
+## Task 10 authentication and summary access direction (proposed implementation)
+
+R-17 (section 17, PDF page 6) identifies login and role-based permissions as preferred system features and requires authorized-device web access; it does not prescribe local passwords, SSO, a fixed account count, role names, or summary-reader scope. R-11 (section 11, PDF page 4) continues to require the user, date/time, previous value, and updated value, and remains only partially implemented. A two-individual-administrator initial direction, dedicated read-only summary access, and later Management AIOS integration are project design proposals pending company approval. The proposed 15-character password-only minimum, Argon2id, cookie/session settings, and account/session table structures are technical policy proposals, not requirements stated by the PDF. They do not weaken R-11 or approve any access grants. Employee synchronization must not provision application accounts. See [authentication and authorization](../architecture/authentication.md), [roles and permissions](../architecture/roles-permissions.md), and the Phase 10 roadmap.
+
+The exact summary fields, viewer population, account-provisioning authority, password/MFA/session policy, administrator capabilities, approval authority, audit trust/redaction/retention, and Management AIOS service identity remain **Pending Approval**. No operational authentication, summary endpoint, role grant, or audit writer is enabled.
+
 ## Traceability by artifact
 
 | Requirement IDs | Primary design artifact |
@@ -98,3 +104,7 @@ The following are **proposed technical acceptance criteria** that make confirmed
 - Is any exception to mandatory return permitted, and if so, what management-approved evidence, authority, and audit rules apply?
 - What are the idempotency retention period, expiration behavior, cleanup schedule, and client retry window?
 - Which operation scopes are shared across route aliases or versions, and what response data may be replayed?
+
+## Task 10G.1 permission traceability clarification
+
+The permission catalog and access matrix are proposals linked to source requirements; they do not add requirements or assign access. In the original PDF, sections 1–9 (R-01–R-09, PDF pages 1–4) specify asset, employee, allocation, return, repair, and exit data/workflows but do not name authorized roles or per-operation restrictions. Section 10 (R-10, page 4) requires approval workflows for registration, allocation, return, and disposal but does not identify approvers, stages, or self-approval rules. Section 11 (R-11, page 4) requires user, date/time, previous value, and updated value to be available for audit/management review; current implementation remains partial. Section 12 (R-12, pages 4–5) specifies notification topics but not recipients or configuration authorities. Sections 13–15 (R-13–R-15, page 5) specify dashboard, search, and reports but not viewer eligibility or data scopes. Section 16 (R-16, page 6) requires mobile entry/accessibility, not a role model. Section 17 (R-17, page 6) requires web access from authorized devices and lists login and role-based permissions as preferred features; it defines no roles or grants. The two-individual-administrator direction, summary-viewer category, capability names, resource scopes, and Management AIOS service boundary are proposed architecture and remain subject to AUTH-01–AUTH-15 approvals. See the [permission catalog](../architecture/permission-catalog.md) and [access matrix](../architecture/permission-access-matrix.md).
