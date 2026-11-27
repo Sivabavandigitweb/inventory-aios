@@ -276,7 +276,7 @@ def build_restore_check_rehearsal_app(
             if existing.intersection(summary_paths):
                 raise ValueError("Inventory summary route is already registered.")
             application.include_router(summary_router, prefix=settings.api_prefix)
-        application.add_event_handler("shutdown", engine.dispose)
+        application.router.add_event_handler("shutdown", engine.dispose)
         return application
     except Exception:
         engine.dispose()
